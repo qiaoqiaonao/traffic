@@ -1,0 +1,169 @@
+@use "variables" as *;
+
+// 基础样式
+html {
+  scroll-behavior: smooth;
+}
+
+body {
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  background: $bg-dark;
+  color: $text-primary;
+  line-height: 1.6;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+// 滚动条
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: $bg-dark;
+}
+
+::-webkit-scrollbar-thumb {
+  background: $bg-hover;
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: $bg-active;
+}
+
+// 选中文字
+::selection {
+  background: rgba($primary, 0.3);
+  color: $text-primary;
+}
+
+// 工具类
+.container {
+  max-width: 1400px;
+  margin: 0 auto;
+  padding: 0 $space-6;
+}
+
+.page-title {
+  font-size: 32px;
+  font-weight: 700;
+  margin-bottom: $space-6;
+  background: $gradient-primary;
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
+.card {
+  background: $bg-card;
+  border: 1px solid $border;
+  border-radius: $radius-lg;
+  padding: $space-6;
+}
+
+.btn-gradient {
+  background: $gradient-primary;
+  border: none;
+  color: white;
+  font-weight: 600;
+  transition: all $transition;
+
+  &:hover {
+    transform: translateY(-2px);
+    box-shadow: $shadow-glow;
+  }
+}
+
+/* ========= Element Plus：轻提示（顶部水平居中，避免贴底或被长页遮挡） ========= */
+.el-message {
+  position: fixed !important;
+  left: 50% !important;
+  right: auto !important;
+  top: max(24px, env(safe-area-inset-top)) !important;
+  bottom: auto !important;
+  transform: translateX(-50%) !important;
+  margin: 0 !important;
+  min-width: 280px;
+  max-width: min(92vw, 480px);
+  padding: 12px 18px !important;
+  border-radius: 12px !important;
+  box-shadow:
+    0 4px 6px -1px rgba(15, 23, 42, 0.12),
+    0 18px 40px -12px rgba(15, 23, 42, 0.35) !important;
+  border: 1px solid rgba(148, 163, 184, 0.2) !important;
+  backdrop-filter: blur(10px);
+  z-index: 3100 !important;
+}
+
+.el-message--success {
+  background: rgba(16, 185, 129, 0.12) !important;
+  border-color: rgba(16, 185, 129, 0.35) !important;
+}
+
+.el-message--error {
+  background: rgba(239, 68, 68, 0.12) !important;
+  border-color: rgba(239, 68, 68, 0.35) !important;
+}
+
+.el-message--warning {
+  background: rgba(245, 158, 11, 0.12) !important;
+  border-color: rgba(245, 158, 11, 0.35) !important;
+}
+
+/* ========= MessageBox 确认框（居中 + 质感） ========= */
+.traffic-dialog-premium.el-message-box {
+  border-radius: 16px !important;
+  padding: 20px 20px 16px !important;
+  border: 1px solid rgba(148, 163, 184, 0.2) !important;
+  box-shadow:
+    0 24px 48px -12px rgba(15, 23, 42, 0.45),
+    0 0 0 1px rgba(255, 255, 255, 0.04) inset !important;
+  background: linear-gradient(165deg, rgba(30, 41, 59, 0.98), rgba(15, 23, 42, 0.99)) !important;
+  color: #f1f5f9 !important;
+
+  .el-message-box__title {
+    font-weight: 600;
+    font-size: 17px;
+  }
+
+  .el-message-box__message {
+    color: #94a3b8 !important;
+    font-size: 14px;
+    line-height: 1.6;
+  }
+
+  .el-message-box__btns {
+    padding-top: 8px;
+  }
+}
+
+// 动画
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes slideUp {
+  from {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.5; }
+}
+
+.animate-fade-in {
+  animation: fadeIn 0.5s ease;
+}
+
+.animate-slide-up {
+  animation: slideUp 0.5s ease;
+}

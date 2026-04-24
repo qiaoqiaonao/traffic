@@ -1,0 +1,35 @@
+# Java (Maven)
+target/
+*.class
+*.jar
+*.war
+*.nar
+*.ear
+*.log
+*.tmp
+
+# Node / Vue
+node_modules/
+dist/
+.env.local
+.env.*.local
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# IDE
+.idea/
+*.iml
+.vscode/
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+
+# Auto-generated
+frontend/auto-imports.d.ts
+frontend/components.d.ts
+
+uploads/
