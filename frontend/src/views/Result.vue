@@ -270,6 +270,7 @@
     </div>
 
     <!-- 违规记录 -->
+    <!-- 违规记录 -->
     <div class="violation-section" v-if="violations.length > 0">
       <h3 class="section-title">
         <el-icon><WarningFilled /></el-icon>
@@ -278,32 +279,42 @@
       </h3>
       <div class="violation-list">
         <div
-            v-for="(v, idx) in violations.slice(0, 10)"
+            v-for="(v, idx) in displayViolations"
             :key="idx"
             class="violation-item"
             :class="v.type"
         >
           <div class="violation-icon">
             <el-icon v-if="v.type === 'wrong_direction'"><Sort /></el-icon>
-            <el-icon v-else><Timer /></el-icon>
+            <el-icon v-else-if="v.type === 'illegal_parking'"><Timer /></el-icon>
+            <el-icon v-else-if="v.type === 'speeding'"><Odometer /></el-icon>
+            <el-icon v-else><Warning /></el-icon>
           </div>
           <div class="violation-info">
             <div class="violation-title">
-              {{ v.type === 'wrong_direction' ? '逆行检测' : '违停检测' }}
+              {{ violationTitle(v.type) }}
               <span class="violation-time">{{ v.timestamp?.toFixed(2) }}s</span>
             </div>
             <div class="violation-detail">
-              帧号: {{ v.frame }} | 车辆ID: {{ v.track_id }} |
+              帧号: {{ v.frame }} | 车辆ID: {{ v.track_id || '—' }} |
+              <span v-if="v.speed_kmh">速度: {{ v.speed_kmh }} km/h | </span>
+              <span v-if="v.vehicle_count">车辆数: {{ v.vehicle_count }} | </span>
               位置: {{ v.location ? '[' + v.location.map(x => Math.round(x)).join(', ') + ']' : '—' }}
             </div>
           </div>
-          <el-tag :type="v.type === 'wrong_direction' ? 'danger' : 'warning'" size="small">
-            {{ v.type === 'wrong_direction' ? '逆行' : '违停' }}
+          <el-tag :type="violationTagType(v.type)" size="small">
+            {{ violationLabel(v.type) }}
           </el-tag>
         </div>
       </div>
-      <el-button v-if="violations.length > 10" link type="primary" class="view-more">
-        查看全部 {{ violations.length }} 条记录
+      <el-button
+          v-if="violations.length > 10"
+          link
+          type="primary"
+          class="view-more"
+          @click="showAllViolations = !showAllViolations"
+      >
+        {{ showAllViolations ? '收起' : `查看全部 ${violations.length} 条记录` }}
       </el-button>
     </div>
 
@@ -371,6 +382,43 @@ const videoRetryCount = ref(0)
 // ✅ 修复：ECharts 实例变量（使用不同的名字，避免和 ref 冲突）
 let trendChartInstance = null
 const trendChartRef = ref(null)  // 用于模板 ref
+
+const showAllViolations = ref(false)
+
+const displayViolations = computed(() => {
+  if (showAllViolations.value) return violations.value
+  return violations.value.slice(0, 10)
+})
+
+const violationTitle = (type) => {
+  const map = {
+    'wrong_direction': '逆行检测',
+    'illegal_parking': '违停检测',
+    'speeding': '超速检测',
+    'congestion': '拥堵预警'
+  }
+  return map[type] || '异常事件'
+}
+
+const violationLabel = (type) => {
+  const map = {
+    'wrong_direction': '逆行',
+    'illegal_parking': '违停',
+    'speeding': '超速',
+    'congestion': '拥堵'
+  }
+  return map[type] || type
+}
+
+const violationTagType = (type) => {
+  const map = {
+    'wrong_direction': 'danger',
+    'illegal_parking': 'warning',
+    'speeding': 'danger',
+    'congestion': 'info'
+  }
+  return map[type] || 'info'
+}
 
 // 计算属性保持不变...
 const trafficData = computed(() => {

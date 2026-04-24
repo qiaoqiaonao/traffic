@@ -262,7 +262,7 @@ const frameSkipOptions = [
 const config = ref({
   direction: 'vertical',
   position: 50,
-  frameSkip: 3,
+  frameSkip: 2,
   /** 与后端检测线 one_way 对应：单行道路时「离开」方向计逆行 */
   oneWay: false
 })
