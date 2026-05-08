@@ -22,6 +22,25 @@
       </div>
 
       <div class="nav-actions">
+        <el-dropdown v-if="isLoggedIn" trigger="click">
+          <span class="user-dropdown">
+            <el-icon><UserFilled /></el-icon>
+            <span class="user-name">{{ nickname }}</span>
+            <el-icon><ArrowDown /></el-icon>
+          </span>
+          <template #dropdown>
+            <el-dropdown-menu>
+              <el-dropdown-item disabled>
+                <span style="color: #94a3b8;">{{ username }}</span>
+              </el-dropdown-item>
+              <el-dropdown-item divided @click="handleLogout">
+                <el-icon><SwitchButton /></el-icon>
+                退出登录
+              </el-dropdown-item>
+            </el-dropdown-menu>
+          </template>
+        </el-dropdown>
+
         <el-button
             type="primary"
             class="cta-btn"
@@ -36,9 +55,18 @@
 </template>
 
 <script setup>
-import { ref, onMounted, onUnmounted } from 'vue'
+import { ref, computed, onMounted, onUnmounted } from 'vue'
+import { useRouter } from 'vue-router'
+import { UserFilled, ArrowDown, SwitchButton } from '@element-plus/icons-vue'
+import { logoutApi } from '@/api'
+import { toast } from '@/utils/ui'
 
+const router = useRouter()
 const isScrolled = ref(false)
+
+const isLoggedIn = computed(() => !!localStorage.getItem('token'))
+const username = computed(() => localStorage.getItem('username') || '')
+const nickname = computed(() => localStorage.getItem('nickname') || localStorage.getItem('username') || '')
 
 const navItems = [
   { path: '/', name: '首页', icon: 'HomeFilled' },
@@ -50,6 +78,19 @@ const navItems = [
 
 const handleScroll = () => {
   isScrolled.value = window.scrollY > 20
+}
+
+const handleLogout = async () => {
+  try {
+    await logoutApi()
+  } catch (e) {
+    // ignore
+  }
+  localStorage.removeItem('token')
+  localStorage.removeItem('username')
+  localStorage.removeItem('nickname')
+  toast.success('已退出登录')
+  router.push('/login')
 }
 
 onMounted(() => {
@@ -139,6 +180,30 @@ onUnmounted(() => {
 .nav-link.active {
   color: var(--primary);
   background: rgba(99, 102, 241, 0.15);
+}
+
+.user-dropdown {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 16px;
+  border-radius: 10px;
+  cursor: pointer;
+  color: var(--text-secondary);
+  font-size: 14px;
+  transition: all 0.3s;
+}
+
+.user-dropdown:hover {
+  color: var(--text-primary);
+  background: rgba(99, 102, 241, 0.1);
+}
+
+.user-name {
+  max-width: 80px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .cta-btn {
