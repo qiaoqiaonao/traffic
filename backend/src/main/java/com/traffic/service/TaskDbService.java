@@ -7,7 +7,6 @@ import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.traffic.entity.AnalyzeTask;
-import com.traffic.entity.PageResult;
 import com.traffic.enums.TaskStatus;
 import com.traffic.mapper.AnalyzeTaskMapper;
 import lombok.extern.slf4j.Slf4j;
@@ -147,6 +146,41 @@ public class TaskDbService extends ServiceImpl<AnalyzeTaskMapper, AnalyzeTask> {
                 }
                 if (violations != null) {
                     update.setViolationsSummary(objectMapper.writeValueAsString(violations));
+                    // Extract per-type violation counts from details
+                    java.util.List<java.util.Map<String, Object>> details =
+                            (java.util.List<java.util.Map<String, Object>>) violations.get("details");
+                    if (details != null) {
+                        int wd = 0, ip = 0, sp = 0, cg = 0;
+                        double maxSpd = 0;
+                        for (java.util.Map<String, Object> d : details) {
+                            String type = (String) d.get("type");
+                            if ("wrong_direction".equals(type)) wd++;
+                            else if ("illegal_parking".equals(type)) ip++;
+                            else if ("speeding".equals(type)) sp++;
+                            else if ("congestion".equals(type)) cg++;
+                            // Track max speed from violation details
+                            Object spdObj = d.get("speed_kmh");
+                            if (spdObj instanceof Number) {
+                                double spd = ((Number) spdObj).doubleValue();
+                                if (spd > maxSpd) maxSpd = spd;
+                            }
+                        }
+                        update.setWrongDirectionCount(wd);
+                        update.setIllegalParkingCount(ip);
+                        update.setSpeedingCount(sp);
+                        update.setCongestionCount(cg);
+                        if (maxSpd > 0) {
+                            update.setMaxSpeedKmh(new java.math.BigDecimal(String.valueOf(maxSpd)));
+                        }
+                    }
+                }
+
+                // Extract average speed from speed_estimation
+                java.util.Map<String, Object> speedEst =
+                        (java.util.Map<String, Object>) statistics.get("speed_estimation");
+                if (speedEst != null && speedEst.get("avg_kmh") instanceof Number) {
+                    update.setAvgSpeedKmh(new java.math.BigDecimal(
+                            String.valueOf(((Number) speedEst.get("avg_kmh")).doubleValue())));
                 }
             }
 
@@ -235,23 +269,17 @@ public class TaskDbService extends ServiceImpl<AnalyzeTaskMapper, AnalyzeTask> {
     }
 
     public List<AnalyzeTask> getRecentTasks(int limit, Integer status) {
-        List<AnalyzeTask> list;
+        int safeLimit = Math.min(limit, 100);
+        LambdaQueryWrapper<AnalyzeTask> wrapper = new LambdaQueryWrapper<>();
         if (status != null) {
-            list = lambdaQuery()
-                    .eq(AnalyzeTask::getStatus, status)
-                    .orderByDesc(AnalyzeTask::getCreateTime)
-                    .last("LIMIT " + limit)
-                    .list();
-        } else {
-            list = baseMapper.selectRecent(limit);
+            wrapper.eq(AnalyzeTask::getStatus, status);
         }
+        wrapper.orderByDesc(AnalyzeTask::getCreateTime);
 
-        // 调试日志
-        for (AnalyzeTask task : list) {
-            log.debug("历史记录: taskId={}, status={}, progress={}",
-                    task.getTaskId(), task.getStatus(), task.getProgress());
-        }
+        Page<AnalyzeTask> page = new Page<>(1, safeLimit);
+        List<AnalyzeTask> list = analyzeTaskMapper.selectPage(page, wrapper).getRecords();
 
+        log.debug("getRecentTasks: limit={}, status={}, found={}", limit, status, list.size());
         return list;
     }
 
@@ -266,12 +294,9 @@ public class TaskDbService extends ServiceImpl<AnalyzeTaskMapper, AnalyzeTask> {
 
         Page<AnalyzeTask> result = analyzeTaskMapper.selectPage(pageParam, wrapper);
 
-        // 添加调试日志
-        System.out.println("当前页: " + result.getCurrent());
-        System.out.println("每页大小: " + result.getSize());
-        System.out.println("总记录数: " + result.getTotal());
-        System.out.println("总页数: " + result.getPages());
-        System.out.println("当前页数据条数: " + result.getRecords().size());
+        log.debug("分页查询: current={}, size={}, total={}, pages={}, records={}",
+                result.getCurrent(), result.getSize(), result.getTotal(),
+                result.getPages(), result.getRecords().size());
 
         return result;
     }

@@ -233,6 +233,8 @@ import { ref, computed } from 'vue'
 import { ElLoading } from 'element-plus'
 import { analyzeFrame } from '@/api'
 import { toast } from '@/utils/ui'
+import { formatSize } from '@/utils/format'
+import { debugError } from '@/utils/debug'
 
 const fileInput = ref(null)
 const isDragging = ref(false)
@@ -300,7 +302,7 @@ const useSample = async (sample) => {
     loadingInst = ElLoading.service({
       lock: true,
       text: `正在加载示例：${sample.name}`,
-      background: 'rgba(15, 23, 42, 0.65)'
+      background: 'rgba(245, 247, 250, 0.9)'
     })
 
     // 获取示例图片
@@ -332,7 +334,7 @@ const useSample = async (sample) => {
 
   } catch (err) {
     if (loadingInst) loadingInst.close()
-    console.error('加载示例失败:', err)
+    debugError('加载示例失败:', err)
     toast.error(`加载示例图片失败: ${err.message}`)
   }
 }
@@ -409,13 +411,6 @@ const getScoreColor = (score) => {
   return '#ef4444'
 }
 
-const formatSize = (bytes) => {
-  if (!bytes) return '0 B'
-  const k = 1024
-  const sizes = ['B', 'KB', 'MB']
-  const i = Math.floor(Math.log(bytes) / Math.log(k))
-  return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i]
-}
 
 const formatArea = (area) => {
   if (area > 10000) return (area / 10000).toFixed(1) + '万'

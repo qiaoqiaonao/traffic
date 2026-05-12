@@ -50,6 +50,14 @@ public class AnalyzeTask {
     private String violationsSummary;  // 违规摘要
     private String resultJson;  // 完整结果
 
+    // 违规分类统计
+    private Integer wrongDirectionCount;
+    private Integer illegalParkingCount;
+    private Integer speedingCount;
+    private Integer congestionCount;
+    private BigDecimal maxSpeedKmh;
+    private BigDecimal avgSpeedKmh;
+
     private String errorMsg;
 
     private LocalDateTime createTime;

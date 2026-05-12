@@ -1,11 +1,12 @@
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
+import { getWsProgressUrl } from '@/config'
+import { debugLog, debugError } from '@/utils/debug'
 
 export const useAnalysisStore = defineStore('analysis', () => {
-    // State
     const currentTask = ref(null)
     const progress = ref(0)
-    const status = ref('idle') // idle, uploading, processing, completed, failed
+    const status = ref('idle')
     const ws = ref(null)
     const metrics = ref({
         frameCount: 0,
@@ -13,11 +14,9 @@ export const useAnalysisStore = defineStore('analysis', () => {
         fps: 0
     })
 
-    // Getters
     const isAnalyzing = computed(() => status.value === 'processing' || status.value === 'uploading')
     const canCancel = computed(() => isAnalyzing.value)
 
-    // Actions
     const setTask = (task) => {
         currentTask.value = task
     }
@@ -27,19 +26,17 @@ export const useAnalysisStore = defineStore('analysis', () => {
         if (data.frameCount !== undefined) metrics.value.frameCount = data.frameCount
         if (data.totalCars !== undefined) metrics.value.totalCars = data.totalCars
         if (data.fps !== undefined) metrics.value.fps = data.fps
-
         if (data.status) {
             status.value = data.status
         }
     }
 
     const initWebSocket = (taskId, onMessage) => {
-        const wsUrl = `${import.meta.env.VITE_WS_URL || 'ws://localhost:8080'}/ws/progress?taskId=${taskId}`
-
+        const wsUrl = getWsProgressUrl(taskId)
         ws.value = new WebSocket(wsUrl)
 
         ws.value.onopen = () => {
-            console.log('[WebSocket] 连接成功')
+            debugLog('[WebSocket] connected')
         }
 
         ws.value.onmessage = (event) => {
@@ -49,11 +46,11 @@ export const useAnalysisStore = defineStore('analysis', () => {
         }
 
         ws.value.onerror = (error) => {
-            console.error('[WebSocket] 错误:', error)
+            debugError('[WebSocket] error:', error)
         }
 
         ws.value.onclose = () => {
-            console.log('[WebSocket] 连接关闭')
+            debugLog('[WebSocket] closed')
             ws.value = null
         }
 

@@ -92,10 +92,11 @@
 import { ref, reactive } from 'vue'
 import { useRouter } from 'vue-router'
 import { User, Lock, UserFilled } from '@element-plus/icons-vue'
-import { register } from '@/api'
+import { useAuth } from '@/composables/useAuth'
 import { toast } from '@/utils/ui'
 
 const router = useRouter()
+const { register: doRegister } = useAuth()
 const formRef = ref(null)
 const loading = ref(false)
 
@@ -135,24 +136,10 @@ const handleRegister = async () => {
 
   loading.value = true
   try {
-    const res = await register(
-      form.username,
-      form.password,
-      form.nickname || form.username
-    )
-    if (res.data.code === 200) {
-      const { token, username, nickname } = res.data.data
-      localStorage.setItem('token', token)
-      localStorage.setItem('username', username)
-      localStorage.setItem('nickname', nickname)
-
-      toast.success('注册成功！欢迎使用 TrafficAI')
-      router.push('/')
-    } else {
-      toast.error(res.data.message || '注册失败')
-    }
+    await doRegister(form.username, form.password, form.nickname || form.username)
+    router.push('/')
   } catch (err) {
-    toast.error('注册失败: ' + (err.response?.data?.message || err.message))
+    toast.error(err.message || '注册失败')
   } finally {
     loading.value = false
   }
@@ -161,12 +148,12 @@ const handleRegister = async () => {
 
 <style scoped>
 :deep(.el-input__wrapper) {
-  background-color: rgba(15, 23, 42, 0.6) !important;
+  background-color: #fff !important;
   box-shadow: 0 0 0 1px rgba(148, 163, 184, 0.2) inset !important;
 }
 
 :deep(.el-input__inner) {
-  color: #e2e8f0 !important;
+  color: #1e293b !important;
 }
 
 :deep(.el-input__inner::placeholder) {
@@ -183,7 +170,7 @@ const handleRegister = async () => {
   justify-content: center;
   position: relative;
   overflow: hidden;
-  background: #0f172a;
+  background: #f5f7fa;
 }
 
 .auth-bg {
@@ -229,7 +216,7 @@ const handleRegister = async () => {
   z-index: 1;
   width: 420px;
   padding: 48px 40px;
-  background: rgba(30, 41, 59, 0.85);
+  background: rgba(255, 255, 255, 0.95);
   backdrop-filter: blur(20px);
   border: 1px solid rgba(148, 163, 184, 0.15);
   border-radius: 20px;
@@ -265,7 +252,7 @@ const handleRegister = async () => {
 
 .auth-header h2 {
   font-size: 24px;
-  color: #f1f5f9;
+  color: #1e293b;
   margin-bottom: 8px;
 }
 

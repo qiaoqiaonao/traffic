@@ -4,7 +4,7 @@ package com.traffic.controller;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.traffic.entity.AnalyzeTask;
-import com.traffic.entity.PageResult;
+//import com.traffic.entity.PageResult;
 import com.traffic.enums.TaskStatus;
 import com.traffic.service.*;
 import com.traffic.vo.ApiResponse;
@@ -48,14 +48,20 @@ public class TrafficController {
     /**
      * 上传视频分析
      */
+    @Value("${traffic.violation.meters-per-pixel:0.05}")
+    private double defaultMetersPerPixel;
+
     @PostMapping("/analyze")
     public ApiResponse<Map<String, Object>> analyzeVideo(
             @RequestParam("file") MultipartFile file,
             @RequestParam(value = "frameSkip", defaultValue = "3") @Min(1) @Max(10) Integer frameSkip,
-            @RequestParam(value = "detectionLines", required = false) String detectionLinesJson) {
+            @RequestParam(value = "detectionLines", required = false) String detectionLinesJson,
+            @RequestParam(value = "metersPerPixel", defaultValue = "0.05") double metersPerPixel) {
 
         String taskId = UUID.randomUUID().toString().replace("-", "").substring(0, 16);
 
+        // 使用 default 当没传或传 0 时
+        if (metersPerPixel <= 0) metersPerPixel = defaultMetersPerPixel;
 
         try {
             // 保存文件
@@ -66,7 +72,8 @@ public class TrafficController {
                     file.getSize(), frameSkip);
 
             // 启动异步任务
-            asyncAnalyzeService.submitAnalyzeTask(taskId, filePath, frameSkip, detectionLinesJson);
+            asyncAnalyzeService.submitAnalyzeTask(taskId, filePath, frameSkip,
+                    detectionLinesJson, metersPerPixel);
 
             // 返回响应
             Map<String, Object> result = new HashMap<>();
@@ -264,15 +271,81 @@ public class TrafficController {
     }
 
     /**
-     * 健康检查
+     * 违规记录明细查询
      */
-    @GetMapping("/health")
-    public ApiResponse<Map<String, String>> health() {
-        Map<String, String> data = new HashMap<>();
-        log.debug("------------------后端运行正常--------------");
-        data.put("status", "up");
-        data.put("service", "traffic-analysis-backend");
-        data.put("version", "2.0.0");
+    @GetMapping("/violations/{taskId}")
+    public ApiResponse<Map<String, Object>> getViolations(@PathVariable String taskId) {
+        AnalyzeTask task = taskDbService.getByTaskId(taskId);
+        if (task == null) {
+            return ApiResponse.error(404, "任务不存在");
+        }
+        if (task.getResultJson() == null || task.getResultJson().isEmpty()) {
+            return ApiResponse.success(Map.of("total", 0, "details", List.of()));
+        }
+
+        try {
+            Map<String, Object> fullResult = objectMapper.readValue(
+                    task.getResultJson(), new com.fasterxml.jackson.core.type.TypeReference<Map<String, Object>>() {});
+            Map<String, Object> statistics = (Map<String, Object>) fullResult.get("statistics");
+            Map<String, Object> violations = statistics != null ?
+                    (Map<String, Object>) statistics.get("violations") : null;
+
+            Map<String, Object> result = new HashMap<>();
+            result.put("total", violations != null ? violations.get("total") : 0);
+            result.put("details", violations != null ? violations.get("details") : List.of());
+            result.put("summary", Map.of(
+                    "wrongDirectionCount", task.getWrongDirectionCount() != null ? task.getWrongDirectionCount() : 0,
+                    "illegalParkingCount", task.getIllegalParkingCount() != null ? task.getIllegalParkingCount() : 0,
+                    "speedingCount", task.getSpeedingCount() != null ? task.getSpeedingCount() : 0,
+                    "congestionCount", task.getCongestionCount() != null ? task.getCongestionCount() : 0
+            ));
+            result.put("maxSpeedKmh", task.getMaxSpeedKmh());
+            result.put("avgSpeedKmh", task.getAvgSpeedKmh());
+
+            return ApiResponse.success(result);
+        } catch (Exception e) {
+            log.error("获取违规明细失败: {}", taskId, e);
+            return ApiResponse.error(500, "获取失败: " + e.getMessage());
+        }
+    }
+
+    /**
+     * 全局违规统计
+     */
+    @GetMapping("/violations/stats")
+    public ApiResponse<Map<String, Object>> getViolationStats(
+            @RequestParam(defaultValue = "100") @Max(500) Integer limit) {
+
+        List<AnalyzeTask> tasks = taskDbService.getRecentTasks(limit, TaskStatus.COMPLETED.getCode());
+
+        int wrongDirection = 0, illegalParking = 0, speeding = 0, congestion = 0;
+        double maxSpeedAll = 0, speedSum = 0;
+        int speedCount = 0;
+
+        for (AnalyzeTask t : tasks) {
+            if (t.getWrongDirectionCount() != null) wrongDirection += t.getWrongDirectionCount();
+            if (t.getIllegalParkingCount() != null) illegalParking += t.getIllegalParkingCount();
+            if (t.getSpeedingCount() != null) speeding += t.getSpeedingCount();
+            if (t.getCongestionCount() != null) congestion += t.getCongestionCount();
+            if (t.getMaxSpeedKmh() != null && t.getMaxSpeedKmh().doubleValue() > maxSpeedAll) {
+                maxSpeedAll = t.getMaxSpeedKmh().doubleValue();
+            }
+            if (t.getAvgSpeedKmh() != null) {
+                speedSum += t.getAvgSpeedKmh().doubleValue();
+                speedCount++;
+            }
+        }
+
+        Map<String, Object> data = new HashMap<>();
+        data.put("wrongDirectionCount", wrongDirection);
+        data.put("illegalParkingCount", illegalParking);
+        data.put("speedingCount", speeding);
+        data.put("congestionCount", congestion);
+        data.put("totalViolations", wrongDirection + illegalParking + speeding + congestion);
+        data.put("maxSpeedKmh", maxSpeedAll > 0 ? maxSpeedAll : null);
+        data.put("avgSpeedKmh", speedCount > 0 ? speedSum / speedCount : null);
+        data.put("analyzedTasks", tasks.size());
+
         return ApiResponse.success(data);
     }
 }

@@ -30,6 +30,9 @@ public class AuthController {
         try {
             String token = userService.register(username, password, nickname);
             User user = userService.getUserByToken(token);
+            if (user == null) {
+                return ApiResponse.error(500, "注册成功但获取用户信息失败，请重新登录");
+            }
 
             Map<String, Object> data = new HashMap<>();
             data.put("token", token);
@@ -56,6 +59,9 @@ public class AuthController {
         try {
             String token = userService.login(username, password);
             User user = userService.getUserByToken(token);
+            if (user == null) {
+                return ApiResponse.error(500, "登录成功但获取用户信息失败，请重试");
+            }
 
             Map<String, Object> data = new HashMap<>();
             data.put("token", token);

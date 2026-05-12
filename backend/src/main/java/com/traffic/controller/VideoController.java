@@ -15,6 +15,7 @@ import java.io.*;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.nio.file.StandardCopyOption;
 import java.util.HashMap;
 import java.util.Map;
 
@@ -168,21 +169,26 @@ public class VideoController {
     }
 
     /**
-     * 从 Python 服务下载视频到本地
+     * 从 Python 服务下载视频到本地（流式写入，避免OOM）
      */
     private void downloadToLocal(String taskId, Path localPath) throws IOException {
         Files.createDirectories(localPath.getParent());
 
         String url = aiServiceUrl + "/api/analyze/video/" + taskId;
-        log.info("下载视频到本地: {} -> {}", url, localPath);
+        log.info("Downloading video: {} -> {}", url, localPath);
 
-        byte[] data = restTemplate.getForObject(url, byte[].class);
-        if (data == null || data.length == 0) {
-            throw new IOException("下载的视频为空");
+        Path tmpPath = localPath.resolveSibling(localPath.getFileName() + ".tmp");
+        restTemplate.execute(url, HttpMethod.GET, null, response -> {
+            Files.copy(response.getBody(), tmpPath, StandardCopyOption.REPLACE_EXISTING);
+            return null;
+        });
+
+        Files.move(tmpPath, localPath, StandardCopyOption.ATOMIC_MOVE, StandardCopyOption.REPLACE_EXISTING);
+        long size = Files.size(localPath);
+        if (size == 0) {
+            throw new IOException("Downloaded video is empty");
         }
-
-        Files.write(localPath, data);
-        log.info("视频下载完成: {} bytes", data.length);
+        log.info("Video downloaded: {} bytes", size);
     }
 
     /**
@@ -253,16 +259,4 @@ public class VideoController {
         log.debug("视频流传输完成: {} bytes", contentLength);
     }
 
-    /**
-     * 健康检查
-     */
-    @GetMapping("/health")
-    public ApiResponse<Map<String, String>> health() {
-        Map<String, String> data = new HashMap<>();
-        log.debug("------------------后端运行正常--------------");
-        data.put("status", "up");
-        data.put("service", "traffic-analysis-backend");
-        data.put("version", "2.0.0");
-        return ApiResponse.success(data);
-    }
 }

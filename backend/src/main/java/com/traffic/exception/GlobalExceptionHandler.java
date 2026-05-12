@@ -6,6 +6,9 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.validation.BindException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
+import org.springframework.web.client.HttpClientErrorException;
+import org.springframework.web.client.HttpServerErrorException;
+import org.springframework.web.client.ResourceAccessException;
 
 @RestControllerAdvice
 @Slf4j
@@ -22,14 +25,30 @@ public class GlobalExceptionHandler {
         return ApiResponse.error(400, e.getMessage());
     }
 
+    @ExceptionHandler(ResourceAccessException.class)
+    public ApiResponse<Void> handleResourceAccess(ResourceAccessException e) {
+        log.error("AI服务连接失败: {}", e.getMessage());
+        return ApiResponse.error(503, "AI服务暂时不可用，请稍后重试");
+    }
+
+    @ExceptionHandler(HttpClientErrorException.class)
+    public ApiResponse<Void> handleHttpClientError(HttpClientErrorException e) {
+        log.error("AI服务客户端错误: status={}", e.getStatusCode());
+        return ApiResponse.error(502, "AI服务请求失败");
+    }
+
+    @ExceptionHandler(HttpServerErrorException.class)
+    public ApiResponse<Void> handleHttpServerError(HttpServerErrorException e) {
+        log.error("AI服务内部错误: status={}", e.getStatusCode());
+        return ApiResponse.error(502, "AI服务内部错误，请稍后重试");
+    }
+
     @ExceptionHandler(Exception.class)
     public ApiResponse<Void> handleException(Exception e) {
-        // ✅ 忽略视频流相关的响应已提交异常，避免 "No converter for ApiResponse with video/mp4"
         if (e instanceof IllegalStateException
                 && e.getMessage() != null
                 && e.getMessage().contains("getOutputStream")) {
             log.warn("视频流响应已提交，跳过全局异常包装: {}", e.getMessage());
-            // 这里返回 null 让 Spring 继续处理，或者干脆不拦截
             return null;
         }
 

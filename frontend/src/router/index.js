@@ -1,5 +1,6 @@
 import { createRouter, createWebHistory } from 'vue-router'
 import { useAnalysisStore } from '@/stores/analysis'
+import { getToken } from '@/composables/useAuth'
 
 const routes = [
     {
@@ -77,15 +78,13 @@ router.beforeEach((to, from, next) => {
         store.closeWebSocket()
     }
 
-    const token = localStorage.getItem('token')
+    const token = getToken()
 
-    // 需要认证的页面，检查是否登录
     if (to.meta.requiresAuth && !token) {
         next({ path: '/login', query: { redirect: to.fullPath } })
         return
     }
 
-    // 已登录用户访问登录/注册页，跳回首页
     if (to.meta.guest && token) {
         next('/')
         return

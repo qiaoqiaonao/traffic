@@ -91,7 +91,7 @@
           <div class="task-info">
             <div class="task-name">{{ task.fileName }}</div>
             <div class="task-meta">
-              <span>{{ formatTime(task.createTime) }}</span>
+              <span>{{ formatTime(task.createTime, 'relative') }}</span>
               <span class="dot"></span>
               <span>{{ formatSize(task.fileSize) }}</span>
             </div>
@@ -164,6 +164,9 @@ import {
   Timer
 } from '@element-plus/icons-vue'
 import { getHistory } from '@/api'
+import { formatSize, formatTime } from '@/utils/format'
+import { getStatusClass } from '@/utils/status'
+import { debugError } from '@/utils/debug'
 
 const router = useRouter()
 const recentTasks = ref([])
@@ -221,7 +224,7 @@ onMounted(async () => {
       recentTasks.value = res.data.data || []
     }
   } catch (e) {
-    console.error('加载历史失败:', e)
+    debugError('加载历史失败:', e)
   }
 })
 
@@ -231,29 +234,6 @@ const viewResult = (task) => {
   }
 }
 
-const getStatusClass = (status) => {
-  const map = { 0: 'pending', 1: 'processing', 2: 'success', 3: 'error' }
-  return map[status] || 'pending'
-}
-
-const formatTime = (time) => {
-  if (!time) return '-'
-  const date = new Date(time)
-  const now = new Date()
-  const diff = now - date
-  if (diff < 60000) return '刚刚'
-  if (diff < 3600000) return Math.floor(diff / 60000) + '分钟前'
-  if (diff < 86400000) return Math.floor(diff / 3600000) + '小时前'
-  return date.toLocaleDateString()
-}
-
-const formatSize = (bytes) => {
-  if (!bytes) return '0 B'
-  const k = 1024
-  const sizes = ['B', 'KB', 'MB', 'GB']
-  const i = Math.floor(Math.log(bytes) / Math.log(k))
-  return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i]
-}
 </script>
 
 <style scoped>
@@ -407,7 +387,7 @@ const formatSize = (bytes) => {
   justify-content: center;
   gap: 60px;
   padding: 30px;
-  background: rgba(30, 41, 59, 0.5);
+  background: rgba(245, 247, 250, 0.9);
   border: 1px solid var(--border);
   border-radius: 16px;
   backdrop-filter: blur(10px);

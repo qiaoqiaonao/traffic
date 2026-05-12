@@ -118,7 +118,7 @@
           <template #default="{ row }">
             <div class="time-cell">
               <el-icon><Calendar /></el-icon>
-              <span>{{ formatTime(row.createTime) }}</span>
+              <span>{{ formatTime(row.createTime, 'short') }}</span>
             </div>
           </template>
         </el-table-column>
@@ -190,6 +190,10 @@ import { ref, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { getHistory, cancelTask } from '@/api'
 import { toast, confirmAction } from '@/utils/ui'
+import { formatSize, formatTime } from '@/utils/format'
+import { getStatusClass, getStatusText, getStatusType } from '@/utils/status'
+import { debugLog } from '@/utils/debug'
+import { getVideoStreamUrl } from '@/config'
 
 const router = useRouter()
 const loading = ref(false)
@@ -229,7 +233,7 @@ const loadHistory = async () => {
   loading.value = true
   try {
     // 加调试日志确认参数
-    console.log('请求页码:', currentPage.value, '页大小:', pageSize.value)
+    debugLog('请求页码:', currentPage.value, '页大小:', pageSize.value)
 
     const res = await getHistory({
       page: currentPage.value,
@@ -248,21 +252,6 @@ const loadHistory = async () => {
   }
 }
 
-const getStatusClass = (status) => {
-  const map = { 0: 'pending', 1: 'processing', 2: 'success', 3: 'error' }
-  return map[status] || 'pending'
-}
-
-const getStatusType = (status) => {
-  const map = { 0: 'info', 1: 'warning', 2: 'success', 3: 'danger' }
-  return map[status] || 'info'
-}
-
-const getStatusText = (status) => {
-  const map = { 0: '等待中', 1: '处理中', 2: '已完成', 3: '失败' }
-  return map[status] || '未知'
-}
-
 const getProgress = (row) => {
   if (row.status === 2) return 100
   if (row.status === 3) return 100
@@ -275,24 +264,6 @@ const getProgressStatus = (row) => {
   return null
 }
 
-const formatSize = (bytes) => {
-  if (!bytes) return '-'
-  const k = 1024
-  const sizes = ['B', 'KB', 'MB', 'GB']
-  const i = Math.floor(Math.log(bytes) / Math.log(k))
-  return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i]
-}
-
-const formatTime = (time) => {
-  if (!time) return '-'
-  const date = new Date(time)
-  return date.toLocaleString('zh-CN', {
-    month: '2-digit',
-    day: '2-digit',
-    hour: '2-digit',
-    minute: '2-digit'
-  })
-}
 
 const handleRowClick = (row) => {
   if (row.status === 2) {
@@ -305,8 +276,7 @@ const viewResult = (row) => {
 }
 
 const viewVideo = (row) => {
-  const baseUrl = import.meta.env.DEV ? 'http://localhost:8080' : ''
-  window.open(`${baseUrl}/api/video/result/${row.taskId}/stream`, '_blank')
+  window.open(getVideoStreamUrl(row.taskId), '_blank')
 }
 
 const cancelTaskHandler = async (row) => {

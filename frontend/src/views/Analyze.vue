@@ -133,6 +133,21 @@
               </el-option>
             </el-select>
           </div>
+
+          <div class="config-item">
+            <label>像素比例（影响车速计算精度）</label>
+            <el-select v-model="config.metersPerPixel" size="large" style="width: 100%">
+              <el-option
+                  v-for="opt in metersPerPixelOptions"
+                  :key="opt.value"
+                  :label="opt.label"
+                  :value="opt.value"
+              >
+                <span style="float: left">{{ opt.label }}</span>
+                <span style="float: right; color: #8492a6; font-size: 13px">{{ opt.desc }}</span>
+              </el-option>
+            </el-select>
+          </div>
         </div>
 
         <div class="config-actions">
@@ -236,6 +251,9 @@ import { ref, computed, onUnmounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { analyzeVideo, cancelTask, getResult } from '@/api'
 import { toast, confirmAction } from '@/utils/ui'
+import { getWsProgressUrl } from '@/config'
+import { formatSize } from '@/utils/format'
+import { debugError } from '@/utils/debug'
 
 const router = useRouter()
 const steps = ['上传视频', 'AI分析', '查看结果']
@@ -259,11 +277,18 @@ const frameSkipOptions = [
   { value: 5, label: '跳4帧', desc: '快速预览' }
 ]
 
+const metersPerPixelOptions = [
+  { value: 0.02, label: '近景 (0.02 m/px)', desc: '摄像头离道路较近' },
+  { value: 0.05, label: '标准 (0.05 m/px)', desc: '推荐设置' },
+  { value: 0.08, label: '中远景 (0.08 m/px)', desc: '摄像头离道路较远' },
+  { value: 0.12, label: '远景 (0.12 m/px)', desc: '高空/远距离摄像头' }
+]
+
 const config = ref({
   direction: 'vertical',
   position: 50,
   frameSkip: 2,
-  /** 与后端检测线 one_way 对应：单行道路时「离开」方向计逆行 */
+  metersPerPixel: 0.05,
   oneWay: false
 })
 
@@ -330,14 +355,6 @@ const clearFile = () => {
   if (fileInput.value) fileInput.value.value = ''
 }
 
-const formatSize = (bytes) => {
-  if (!bytes) return '0 B'
-  const k = 1024
-  const sizes = ['B', 'KB', 'MB', 'GB']
-  const i = Math.floor(Math.log(bytes) / Math.log(k))
-  return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i]
-}
-
 const startUpload = async () => {
   if (!selectedFile.value) return
 
@@ -355,7 +372,7 @@ const startUpload = async () => {
       one_way: config.value.oneWay
     }]
 
-    const res = await analyzeVideo(selectedFile.value, config.value.frameSkip, JSON.stringify(detectionLines))
+    const res = await analyzeVideo(selectedFile.value, config.value.frameSkip, JSON.stringify(detectionLines), config.value.metersPerPixel)
 
     if (res.data.code === 200) {
       taskId.value = res.data.data.taskId
@@ -377,7 +394,7 @@ const startUpload = async () => {
 }
 
 const initWebSocket = () => {
-  const wsUrl = `${import.meta.env.VITE_WS_URL || 'ws://localhost:8080'}/ws/progress?taskId=${taskId.value}`
+  const wsUrl = getWsProgressUrl(taskId.value)
   ws.value = new WebSocket(wsUrl)
 
   ws.value.onopen = () => {
@@ -407,7 +424,7 @@ const startPolling = () => {
         updateProgress(res.data.data)
       }
     } catch (e) {
-      console.error('轮询失败:', e)
+      debugError('轮询失败:', e)
     }
   }, 3000)
 }
@@ -742,13 +759,13 @@ onUnmounted(cleanup)
   width: 100%;
   height: 120px;
   background:
-      linear-gradient(45deg, #1e293b 25%, transparent 25%),
-      linear-gradient(-45deg, #1e293b 25%, transparent 25%),
-      linear-gradient(45deg, transparent 75%, #1e293b 75%),
-      linear-gradient(-45deg, transparent 75%, #1e293b 75%);
+      linear-gradient(45deg, #e2e8f0 25%, transparent 25%),
+      linear-gradient(-45deg, #e2e8f0 25%, transparent 25%),
+      linear-gradient(45deg, transparent 75%, #e2e8f0 75%),
+      linear-gradient(-45deg, transparent 75%, #e2e8f0 75%);
   background-size: 20px 20px;
   background-position: 0 0, 0 10px, 10px -10px, -10px 0px;
-  background-color: #0f172a;
+  background-color: #f5f7fa;
   border-radius: 8px;
   overflow: hidden;
 }

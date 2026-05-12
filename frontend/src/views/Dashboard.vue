@@ -228,6 +228,8 @@
 import { ref, onMounted, onUnmounted, watch, nextTick } from 'vue'
 import * as echarts from 'echarts'
 import { getHistory } from '@/api'
+import { debugLog } from '@/utils/debug'
+import { VIOLATION_LABELS, VIOLATION_COLORS, VIOLATION_TYPES } from '@/utils/violation'
 
 const loading = ref(false)
 const timeRange = ref('today')
@@ -272,14 +274,14 @@ function fmtTimeAgo (iso) {
 async function loadDashboard () {
   loading.value = true
   try {
-    console.log('🚀 Dashboard 开始加载...')
+    debugLog('🚀 Dashboard 开始加载...')
     const res = await getHistory({ page: 1, pageSize: 100 })
-    console.log('📦 API 返回:', res.data)
+    debugLog('📦 API 返回:', res.data)
 
     const records = res.data?.data?.records || []
-    console.log('📊 总记录数:', records.length)
-    console.log('✅ 已完成任务:', records.filter(r => r.status === 2).length)
-    console.log('📝 有 resultJson 的:', records.filter(r => r.status === 2 && r.resultJson).length)
+    debugLog('📊 总记录数:', records.length)
+    debugLog('✅ 已完成任务:', records.filter(r => r.status === 2).length)
+    debugLog('📝 有 resultJson 的:', records.filter(r => r.status === 2 && r.resultJson).length)
 
     let totalUnique = 0
     let completed = 0
@@ -288,7 +290,7 @@ async function loadDashboard () {
     let speedN = 0
     let sumIn = 0
     let sumOut = 0
-    const vCount = { wrong_direction: 0, illegal_parking: 0 }
+    const vCount = { wrong_direction: 0, illegal_parking: 0, speeding: 0, congestion: 0 }
     const pieAgg = { car: 0, bus: 0, van: 0, others: 0 }
     const lineTotals = {}
     const processing = []
@@ -315,8 +317,7 @@ async function loadDashboard () {
           }
           const details = pr.statistics?.violations?.details || []
           for (const d of details) {
-            if (d.type === 'wrong_direction') vCount.wrong_direction++
-            else if (d.type === 'illegal_parking') vCount.illegal_parking++
+            if (vCount.hasOwnProperty(d.type)) vCount[d.type]++
           }
           const cd = pr.statistics?.class_distribution || {}
           pieAgg.car += cd.car || 0
@@ -345,24 +346,15 @@ async function loadDashboard () {
     kpis.value[2].value = speedN ? (speedSum / speedN).toFixed(1) : '—'
     kpis.value[3].value = String(violationSum)
 
-    const vtot = vCount.wrong_direction + vCount.illegal_parking
+    const vtot = vCount.wrong_direction + vCount.illegal_parking + vCount.speeding + vCount.congestion
     violationStats.value = vtot
-        ? [
-          {
-            type: 'wrong_direction',
-            name: '逆行',
-            count: vCount.wrong_direction,
-            percent: Math.round((vCount.wrong_direction / vtot) * 100),
-            color: '#6366f1'
-          },
-          {
-            type: 'illegal_parking',
-            name: '违停',
-            count: vCount.illegal_parking,
-            percent: Math.round((vCount.illegal_parking / vtot) * 100),
-            color: '#8b5cf6'
-          }
-        ]
+        ? VIOLATION_TYPES.map(t => ({
+            type: t,
+            name: VIOLATION_LABELS[t],
+            count: vCount[t],
+            percent: Math.round((vCount[t] / vtot) * 100),
+            color: VIOLATION_COLORS[t]
+          })).filter(s => s.count > 0)
         : []
 
     const spread = (total) => Array.from({ length: 24 }, () => Math.max(0, Math.round(total / 24)))
@@ -415,7 +407,7 @@ async function loadDashboard () {
     }
     recentActivities.value = acts
 
-    console.log('🎯 聚合结果:', { sumIn, sumOut, pieAgg, lineTotals, completed })
+    debugLog('🎯 聚合结果:', { sumIn, sumOut, pieAgg, lineTotals, completed })
 
     await nextTick()
     setTimeout(() => {
@@ -448,9 +440,9 @@ const initTrendChart = () => {
   trendChartInst.setOption({
     tooltip: {
       trigger: 'axis',
-      backgroundColor: 'rgba(30, 41, 59, 0.9)',
+      backgroundColor: 'rgba(255, 255, 255, 0.95)',
       borderColor: 'rgba(99, 102, 241, 0.3)',
-      textStyle: { color: '#f1f5f9' }
+      textStyle: { color: '#1e293b' }
     },
     legend: {
       data: ['进入', '离开'],
@@ -467,14 +459,14 @@ const initTrendChart = () => {
     xAxis: {
       type: 'category',
       data: hours,
-      axisLine: { lineStyle: { color: '#334155' } },
-      axisLabel: { color: '#94a3b8' }
+      axisLine: { lineStyle: { color: '#d0d5dd' } },
+      axisLabel: { color: '#64748b' }
     },
     yAxis: {
       type: 'value',
-      axisLine: { lineStyle: { color: '#334155' } },
-      axisLabel: { color: '#94a3b8' },
-      splitLine: { lineStyle: { color: '#1e293b' } }
+      axisLine: { lineStyle: { color: '#d0d5dd' } },
+      axisLabel: { color: '#64748b' },
+      splitLine: { lineStyle: { color: '#e2e8f0' } }
     },
     series: [
       {
@@ -507,7 +499,7 @@ const initTrendChart = () => {
       }
     ]
   })
-  console.log('✅ 趋势图初始化完成')
+  debugLog('✅ 趋势图初始化完成')
 }
 
 const initPieChart = () => {
@@ -521,9 +513,9 @@ const initPieChart = () => {
   pieChartInst.setOption({
     tooltip: {
       trigger: 'item',
-      backgroundColor: 'rgba(30, 41, 59, 0.9)',
+      backgroundColor: 'rgba(255, 255, 255, 0.95)',
       borderColor: 'rgba(99, 102, 241, 0.3)',
-      textStyle: { color: '#f1f5f9' }
+      textStyle: { color: '#1e293b' }
     },
     legend: {
       orient: 'vertical',
@@ -538,14 +530,14 @@ const initPieChart = () => {
       avoidLabelOverlap: false,
       itemStyle: {
         borderRadius: 8,
-        borderColor: '#1e293b',
+        borderColor: '#e2e8f0',
         borderWidth: 2
       },
       label: { show: false },
       data: pieSlices.value
     }]
   })
-  console.log('✅ 饼图初始化完成')
+  debugLog('✅ 饼图初始化完成')
 }
 
 const initBarChart = () => {
@@ -559,9 +551,9 @@ const initBarChart = () => {
   barChartInst.setOption({
     tooltip: {
       trigger: 'axis',
-      backgroundColor: 'rgba(30, 41, 59, 0.9)',
+      backgroundColor: 'rgba(255, 255, 255, 0.95)',
       borderColor: 'rgba(99, 102, 241, 0.3)',
-      textStyle: { color: '#f1f5f9' }
+      textStyle: { color: '#1e293b' }
     },
     grid: {
       left: '3%',
@@ -572,14 +564,14 @@ const initBarChart = () => {
     xAxis: {
       type: 'category',
       data: barCategories.value,
-      axisLine: { lineStyle: { color: '#334155' } },
-      axisLabel: { color: '#94a3b8' }
+      axisLine: { lineStyle: { color: '#d0d5dd' } },
+      axisLabel: { color: '#64748b' }
     },
     yAxis: {
       type: 'value',
-      axisLine: { lineStyle: { color: '#334155' } },
-      axisLabel: { color: '#94a3b8' },
-      splitLine: { lineStyle: { color: '#1e293b' } }
+      axisLine: { lineStyle: { color: '#d0d5dd' } },
+      axisLabel: { color: '#64748b' },
+      splitLine: { lineStyle: { color: '#e2e8f0' } }
     },
     series: [{
       data: barValues.value,
@@ -594,11 +586,11 @@ const initBarChart = () => {
       }
     }]
   })
-  console.log('✅ 柱状图初始化完成')
+  debugLog('✅ 柱状图初始化完成')
 }
 
 const updateCharts = () => {
-  console.log('更新图表:', timeRange.value)
+  debugLog('更新图表:', timeRange.value)
 }
 
 const handleResize = () => {

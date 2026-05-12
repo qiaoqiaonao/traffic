@@ -26,6 +26,12 @@ public interface AnalyzeTaskMapper extends BaseMapper<AnalyzeTask> {
             "<if test='task.uniqueVehicles != null'>unique_vehicles=#{task.uniqueVehicles},</if>" +
             "<if test='task.trafficSummary != null'>traffic_summary=#{task.trafficSummary},</if>" +
             "<if test='task.violationsSummary != null'>violations_summary=#{task.violationsSummary},</if>" +
+            "<if test='task.wrongDirectionCount != null'>wrong_direction_count=#{task.wrongDirectionCount},</if>" +
+            "<if test='task.illegalParkingCount != null'>illegal_parking_count=#{task.illegalParkingCount},</if>" +
+            "<if test='task.speedingCount != null'>speeding_count=#{task.speedingCount},</if>" +
+            "<if test='task.congestionCount != null'>congestion_count=#{task.congestionCount},</if>" +
+            "<if test='task.maxSpeedKmh != null'>max_speed_kmh=#{task.maxSpeedKmh},</if>" +
+            "<if test='task.avgSpeedKmh != null'>avg_speed_kmh=#{task.avgSpeedKmh},</if>" +
             "<if test='task.resultJson != null'>result_json=#{task.resultJson},</if>" +
             "<if test='task.errorMsg != null'>error_msg=#{task.errorMsg},</if>" +
             "<if test='task.completedTime != null'>completed_time=#{task.completedTime},</if>" +

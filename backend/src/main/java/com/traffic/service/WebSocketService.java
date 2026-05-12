@@ -87,6 +87,25 @@ public class WebSocketService {
         }
     }
 
+    /**
+     * Redis pub/sub 回调：接收 Python 推送的实时帧，转发到 WebSocket 客户端
+     */
+    public void onFrameMessage(String message, String channel) {
+        // channel = "traffic:frame:{taskId}"
+        String taskId = channel.substring(channel.lastIndexOf(':') + 1);
+        WebSocketSession session = sessions.get(taskId);
+        if (session != null && session.isOpen()) {
+            try {
+                synchronized (session) {
+                    session.sendMessage(new TextMessage(message));
+                }
+            } catch (IOException e) {
+                log.debug("实时帧发送失败: taskId={}", taskId);
+                removeSession(taskId);
+            }
+        }
+    }
+
     public void clearTask(String taskId) {
         sessions.remove(taskId);
         progressCache.remove(taskId);

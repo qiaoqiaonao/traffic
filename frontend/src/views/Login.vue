@@ -72,11 +72,12 @@
 import { ref, reactive } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { User, Lock } from '@element-plus/icons-vue'
-import { login } from '@/api'
+import { useAuth } from '@/composables/useAuth'
 import { toast } from '@/utils/ui'
 
 const router = useRouter()
 const route = useRoute()
+const { login: doLogin } = useAuth()
 const formRef = ref(null)
 const loading = ref(false)
 
@@ -102,22 +103,11 @@ const handleLogin = async () => {
 
   loading.value = true
   try {
-    const res = await login(form.username, form.password)
-    if (res.data.code === 200) {
-      const { token, username, nickname } = res.data.data
-      localStorage.setItem('token', token)
-      localStorage.setItem('username', username)
-      localStorage.setItem('nickname', nickname)
-
-      toast.success(`欢迎回来，${nickname || username}`)
-
-      const redirect = route.query.redirect || '/'
-      router.push(redirect)
-    } else {
-      toast.error(res.data.message || '登录失败')
-    }
+    await doLogin(form.username, form.password)
+    const redirect = route.query.redirect || '/'
+    router.push(redirect)
   } catch (err) {
-    toast.error('登录失败: ' + (err.response?.data?.message || err.message))
+    toast.error(err.message || '登录失败')
   } finally {
     loading.value = false
   }
@@ -127,13 +117,13 @@ const handleLogin = async () => {
 <style scoped>
 /* 输入框背景改为半透明深色，匹配页面主题 */
 :deep(.el-input__wrapper) {
-  background-color: rgba(15, 23, 42, 0.6) !important;
+  background-color: #fff !important;
   box-shadow: 0 0 0 1px rgba(148, 163, 184, 0.2) inset !important;
 }
 
 /* 输入文字改为浅灰白色，避免纯白刺眼，同时确保在深色背景上清晰 */
 :deep(.el-input__inner) {
-  color: #e2e8f0 !important;
+  color: #1e293b !important;
 }
 
 /* placeholder 用更暗的灰色，与正式输入内容区分开 */
@@ -153,7 +143,7 @@ const handleLogin = async () => {
   justify-content: center;
   position: relative;
   overflow: hidden;
-  background: #0f172a;
+  background: #f5f7fa;
 }
 
 .auth-bg {
@@ -199,7 +189,7 @@ const handleLogin = async () => {
   z-index: 1;
   width: 420px;
   padding: 48px 40px;
-  background: rgba(30, 41, 59, 0.85);
+  background: rgba(255, 255, 255, 0.95);
   backdrop-filter: blur(20px);
   border: 1px solid rgba(148, 163, 184, 0.15);
   border-radius: 20px;
@@ -235,7 +225,7 @@ const handleLogin = async () => {
 
 .auth-header h2 {
   font-size: 24px;
-  color: #f1f5f9;
+  color: #1e293b;
   margin-bottom: 8px;
 }
 

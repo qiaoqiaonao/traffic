@@ -24,6 +24,7 @@ import java.nio.file.Paths;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.Future;
+import java.util.concurrent.atomic.AtomicInteger;
 
 @Service
 @Slf4j
@@ -31,6 +32,21 @@ public class AsyncAnalyzeService {
 
     @Value("${ai.service.url}")
     private String aiServiceUrl;
+
+    @Value("${ai.service.polling.base-delay-ms:2000}")
+    private int baseDelayMs;
+
+    @Value("${ai.service.polling.max-delay-ms:10000}")
+    private int maxDelayMs;
+
+    @Value("${ai.service.polling.max-attempts:60}")
+    private int maxAttempts;
+
+    @Value("${ai.service.polling.max-consecutive-errors:5}")
+    private int maxConsecutiveErrors;
+
+    @Value("${ai.service.polling.circuit-cooldown-seconds:30}")
+    private int circuitCooldownSeconds;
 
     @Autowired
     private RestTemplate restTemplate;
@@ -47,10 +63,12 @@ public class AsyncAnalyzeService {
     @Autowired
     private FileStorageService fileStorageService;
 
-    // 用于存储正在运行的任务
     private final ConcurrentHashMap<String, Future<?>> runningTasks = new ConcurrentHashMap<>();
-
     private final ObjectMapper objectMapper = new ObjectMapper();
+
+    // Circuit breaker state
+    private final AtomicInteger consecutiveErrors = new AtomicInteger(0);
+    private volatile long circuitOpenUntil = 0;
 
     public Map<String, Object> analyzeFrame(MultipartFile file) {
         try {
@@ -88,7 +106,8 @@ public class AsyncAnalyzeService {
 
     @Async("taskExecutor")
     public Future<Boolean> submitAnalyzeTask(String taskId, String filePath,
-                                             Integer frameSkip, String detectionLinesJson) {
+                                             Integer frameSkip, String detectionLinesJson,
+                                             double metersPerPixel) {
 
         // 初始化取消标志
         cancelFlags.put(taskId, false);
@@ -110,6 +129,7 @@ public class AsyncAnalyzeService {
             body.add("task_id", taskId);
             body.add("file", new org.springframework.core.io.FileSystemResource(videoFile.toFile()));
             body.add("frame_skip", frameSkip);
+            body.add("meters_per_pixel", String.valueOf(metersPerPixel));
             if (detectionLinesJson != null) {
                 body.add("detection_lines", detectionLinesJson);
             }
@@ -187,19 +207,22 @@ public class AsyncAnalyzeService {
     }
 
     private void pollAndUpdate(String taskId) throws InterruptedException {
-        int baseDelay = 2000;
-        int maxDelay = 10000;
-        int maxAttempts = 300;
         int attempt = 0;
 
         while (attempt < maxAttempts) {
+            // Check circuit breaker
+            if (System.currentTimeMillis() < circuitOpenUntil) {
+                long remainingSec = (circuitOpenUntil - System.currentTimeMillis()) / 1000;
+                throw new RuntimeException("AI服务熔断中，剩余冷却时间 " + remainingSec + " 秒");
+            }
+
             if (Boolean.TRUE.equals(cancelFlags.get(taskId))) {
                 throw new InterruptedException("用户取消");
             }
 
             try {
-                long delay = (long) baseDelay * (1L << (attempt / 10));
-                Thread.sleep(Math.min(delay, maxDelay));
+                long delay = Math.min((long) baseDelayMs * (1L << (attempt / 10)), maxDelayMs);
+                Thread.sleep(delay);
             } catch (InterruptedException e) {
                 Thread.currentThread().interrupt();
                 throw e;
@@ -215,6 +238,9 @@ public class AsyncAnalyzeService {
                     continue;
                 }
 
+                // Successful response: reset circuit breaker
+                consecutiveErrors.set(0);
+
                 Map<String, Object> data = (Map<String, Object>) result.get("data");
                 String status = (String) data.get("status");
                 Integer progress = (Integer) data.get("progress");
@@ -224,11 +250,10 @@ public class AsyncAnalyzeService {
                 if ("completed".equals(status)) {
                     Map<String, Object> resultData = (Map<String, Object>) data.get("result");
 
-                    // ✅ 关键：如果保存失败，直接抛异常结束轮询，别无限重试
                     try {
                         taskDbService.completeTask(taskId, resultData);
                         webSocketService.sendProgress(taskId, 100, "分析完成！");
-                        return; // 成功，结束轮询
+                        return;
                     } catch (Exception saveEx) {
                         log.error("保存结果失败，终止任务: taskId={}, error={}", taskId, saveEx.getMessage());
                         throw new RuntimeException("保存结果失败: " + saveEx.getMessage());
@@ -246,16 +271,25 @@ public class AsyncAnalyzeService {
             } catch (InterruptedException e) {
                 throw e;
             } catch (Exception e) {
-                // 区分：网络抖动可重试；业务失败（AI 报错、保存失败）立即终止轮询
                 String msg = e.getMessage();
                 if (msg != null && (msg.contains("保存结果失败") || msg.contains("AI分析失败"))) {
                     throw new RuntimeException(msg);
                 }
-                log.warn("轮询网络异常，继续重试: {}", msg);
+
+                // Increment circuit breaker error count
+                int errCount = consecutiveErrors.incrementAndGet();
+                log.warn("Polling error (consecutive={}/{}): {}", errCount, maxConsecutiveErrors, msg);
+
+                if (errCount >= maxConsecutiveErrors) {
+                    circuitOpenUntil = System.currentTimeMillis() + (long) circuitCooldownSeconds * 1000;
+                    log.error("Circuit breaker OPEN: {} consecutive errors, cooling down for {}s",
+                            errCount, circuitCooldownSeconds);
+                    throw new RuntimeException("AI服务连续 " + errCount + " 次失败，已熔断 " + circuitCooldownSeconds + " 秒");
+                }
                 attempt++;
             }
         }
-        throw new RuntimeException("轮询超时");
+        throw new RuntimeException("轮询超时（最大尝试次数: " + maxAttempts + "）");
     }
 
     private void handleFailure(String taskId, String error) {

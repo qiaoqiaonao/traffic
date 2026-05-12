@@ -85,20 +85,24 @@ public class UserService {
     }
 
     /**
-     * 根据token获取用户信息
+     * 根据token获取用户信息（Redis不可用时降级，首次返回null让用户重新登录）
      */
     public User getUserByToken(String token) {
         if (token == null || token.isEmpty()) {
             return null;
         }
-        String key = TOKEN_PREFIX + token;
-        String username = redisTemplate.opsForValue().get(key);
-        if (username == null) {
+        try {
+            String key = TOKEN_PREFIX + token;
+            String username = redisTemplate.opsForValue().get(key);
+            if (username == null) {
+                return null;
+            }
+            redisTemplate.expire(key, TOKEN_TTL);
+            return userMapper.selectByUsername(username);
+        } catch (Exception e) {
+            log.warn("Redis读取token失败（可能未启动），降级处理: {}", e.getMessage());
             return null;
         }
-        // 刷新token过期时间
-        redisTemplate.expire(key, TOKEN_TTL);
-        return userMapper.selectByUsername(username);
     }
 
     /**
@@ -106,17 +110,25 @@ public class UserService {
      */
     public void logout(String token) {
         if (token != null && !token.isEmpty()) {
-            redisTemplate.delete(TOKEN_PREFIX + token);
+            try {
+                redisTemplate.delete(TOKEN_PREFIX + token);
+            } catch (Exception e) {
+                log.warn("Redis删除token失败: {}", e.getMessage());
+            }
         }
     }
 
     private String generateToken(User user) {
         String token = UUID.randomUUID().toString().replace("-", "");
-        redisTemplate.opsForValue().set(
-                TOKEN_PREFIX + token,
-                user.getUsername(),
-                TOKEN_TTL
-        );
+        try {
+            redisTemplate.opsForValue().set(
+                    TOKEN_PREFIX + token,
+                    user.getUsername(),
+                    TOKEN_TTL
+            );
+        } catch (Exception e) {
+            log.warn("Redis存储token失败，用户需每次登录: {}", e.getMessage());
+        }
         return token;
     }
 }

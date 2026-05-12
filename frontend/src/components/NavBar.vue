@@ -55,18 +55,14 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted, onUnmounted } from 'vue'
+import { ref, onMounted, onUnmounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { UserFilled, ArrowDown, SwitchButton } from '@element-plus/icons-vue'
-import { logoutApi } from '@/api'
-import { toast } from '@/utils/ui'
+import { useAuth } from '@/composables/useAuth'
 
 const router = useRouter()
+const { isLoggedIn, username, nickname, logout } = useAuth()
 const isScrolled = ref(false)
-
-const isLoggedIn = computed(() => !!localStorage.getItem('token'))
-const username = computed(() => localStorage.getItem('username') || '')
-const nickname = computed(() => localStorage.getItem('nickname') || localStorage.getItem('username') || '')
 
 const navItems = [
   { path: '/', name: '首页', icon: 'HomeFilled' },
@@ -80,17 +76,8 @@ const handleScroll = () => {
   isScrolled.value = window.scrollY > 20
 }
 
-const handleLogout = async () => {
-  try {
-    await logoutApi()
-  } catch (e) {
-    // ignore
-  }
-  localStorage.removeItem('token')
-  localStorage.removeItem('username')
-  localStorage.removeItem('nickname')
-  toast.success('已退出登录')
-  router.push('/login')
+const handleLogout = () => {
+  logout()
 }
 
 onMounted(() => {
@@ -109,7 +96,7 @@ onUnmounted(() => {
   left: 0;
   right: 0;
   height: 70px;
-  background: rgba(15, 23, 42, 0.8);
+  background: rgba(255, 255, 255, 0.9);
   backdrop-filter: blur(20px);
   border-bottom: 1px solid transparent;
   transition: all 0.3s;
@@ -118,7 +105,8 @@ onUnmounted(() => {
 
 .navbar.scrolled {
   border-color: var(--border);
-  background: rgba(15, 23, 42, 0.95);
+  background: rgba(255, 255, 255, 0.98);
+  box-shadow: 0 1px 3px rgba(0,0,0,0.06);
 }
 
 .nav-container {

@@ -1,8 +1,7 @@
 package com.traffic.service;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.core.io.FileSystemResource;
 import org.springframework.http.*;
@@ -12,16 +11,14 @@ import org.springframework.util.MultiValueMap;
 import org.springframework.web.client.RestTemplate;
 import org.springframework.web.multipart.MultipartFile;
 
-import java.io.File;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Map;
 
 @Service
+@Slf4j
 public class AiService {
-
-    private static final Logger logger = LoggerFactory.getLogger(AiService.class);
 
     @Value("${ai.service.url:http://localhost:8000}")
     private String aiServiceUrl;
@@ -45,7 +42,7 @@ public class AiService {
             Path tempFile = tempDir.resolve(file.getOriginalFilename());
             file.transferTo(tempFile.toFile());
 
-            logger.info("上传视频到AI服务: {}", tempFile);
+            log.info("上传视频到AI服务: {}", tempFile);
 
             // 构建multipart请求
             MultiValueMap<String, Object> body = new LinkedMultiValueMap<>();
@@ -71,15 +68,15 @@ public class AiService {
             Files.deleteIfExists(tempDir);
 
             Map<String, Object> result = response.getBody();
-            logger.info("AI服务响应: {}", result);
+            log.info("AI服务响应: {}", result);
 
             return result;
 
         } catch (IOException e) {
-            logger.error("文件处理失败", e);
+            log.error("文件处理失败", e);
             throw new RuntimeException("文件上传失败: " + e.getMessage());
         } catch (Exception e) {
-            logger.error("调用AI服务失败", e);
+            log.error("调用AI服务失败", e);
             throw new RuntimeException("AI服务调用失败: " + e.getMessage());
         }
     }
@@ -91,13 +88,13 @@ public class AiService {
     public Map<String, Object> getResult(String taskId) {
         try {
             String url = aiServiceUrl + "/api/analyze/result/" + taskId;
-            logger.debug("查询任务结果: {}", url);
+            log.debug("查询任务结果: {}", url);
 
             ResponseEntity<Map> response = restTemplate.getForEntity(url, Map.class);
             return response.getBody();
 
         } catch (Exception e) {
-            logger.error("查询任务结果失败: {}", taskId, e);
+            log.error("查询任务结果失败: {}", taskId, e);
             throw new RuntimeException("查询结果失败: " + e.getMessage());
         }
     }
@@ -107,7 +104,7 @@ public class AiService {
      */
     @SuppressWarnings("unchecked")
     public Map<String, Object> analyzeFrame(MultipartFile file) {
-        logger.info("单张图片检测开始: {}", file.getOriginalFilename());
+        log.info("单张图片检测开始: {}", file.getOriginalFilename());
         try {
             Path tempDir = Files.createTempDirectory("frame_");
             Path tempFile = tempDir.resolve(file.getOriginalFilename());
@@ -135,7 +132,7 @@ public class AiService {
             return response.getBody();
 
         } catch (Exception e) {
-            logger.error("单帧检测失败", e);
+            log.error("单帧检测失败", e);
             throw new RuntimeException("检测失败: " + e.getMessage());
         }
     }

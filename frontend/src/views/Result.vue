@@ -270,13 +270,47 @@
     </div>
 
     <!-- 违规记录 -->
-    <!-- 违规记录 -->
     <div class="violation-section" v-if="violations.length > 0">
       <h3 class="section-title">
         <el-icon><WarningFilled /></el-icon>
         违规记录
         <el-tag type="danger" size="small" class="violation-count">{{ violations.length }}</el-tag>
       </h3>
+
+      <!-- 违规摘要卡片 -->
+      <div class="violation-summary-cards">
+        <div
+            v-for="vt in VIOLATION_TYPES"
+            :key="vt"
+            class="violation-summary-card"
+            :style="{ borderColor: VIOLATION_COLORS[vt] + '40' }"
+        >
+          <div class="summary-icon" :style="{ background: VIOLATION_COLORS[vt] + '20', color: VIOLATION_COLORS[vt] }">
+            <el-icon :size="20"><component :is="VIOLATION_ICONS[vt]" /></el-icon>
+          </div>
+          <div class="summary-info">
+            <span class="summary-count">{{ violationTypeCount(vt) }}</span>
+            <span class="summary-label">{{ VIOLATION_LABELS[vt] }}</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- 类型筛选 -->
+      <div class="violation-filter" v-if="violations.length > 3">
+        <el-radio-group v-model="violationFilter" size="small">
+          <el-radio-button label="">全部 ({{ violations.length }})</el-radio-button>
+          <el-radio-button
+              v-for="vt in VIOLATION_TYPES"
+              :key="vt"
+              :label="vt"
+              :disabled="violationTypeCount(vt) === 0"
+          >
+            {{ VIOLATION_LABELS[vt] }} ({{ violationTypeCount(vt) }})
+          </el-radio-button>
+        </el-radio-group>
+      </div>
+
+      <!-- 违规列表 -->
       <div class="violation-list">
         <div
             v-for="(v, idx) in displayViolations"
@@ -284,38 +318,55 @@
             class="violation-item"
             :class="v.type"
         >
-          <div class="violation-icon">
-            <el-icon v-if="v.type === 'wrong_direction'"><Sort /></el-icon>
-            <el-icon v-else-if="v.type === 'illegal_parking'"><Timer /></el-icon>
-            <el-icon v-else-if="v.type === 'speeding'"><Odometer /></el-icon>
-            <el-icon v-else><Warning /></el-icon>
+          <div class="violation-icon" :style="{ background: VIOLATION_COLORS[v.type] + '18', color: VIOLATION_COLORS[v.type] }">
+            <el-icon><component :is="VIOLATION_ICONS[v.type] || 'Warning'" /></el-icon>
           </div>
           <div class="violation-info">
             <div class="violation-title">
-              {{ violationTitle(v.type) }}
+              {{ VIOLATION_TITLES[v.type] || v.type }}
+              <el-tag
+                  :type="getSeverityTagType(v)"
+                  size="small"
+                  effect="dark"
+                  class="severity-tag"
+              >
+                {{ getSeverityLabel(v) }}
+              </el-tag>
               <span class="violation-time">{{ v.timestamp?.toFixed(2) }}s</span>
             </div>
             <div class="violation-detail">
-              帧号: {{ v.frame }} | 车辆ID: {{ v.track_id || '—' }} |
-              <span v-if="v.speed_kmh">速度: {{ v.speed_kmh }} km/h | </span>
-              <span v-if="v.vehicle_count">车辆数: {{ v.vehicle_count }} | </span>
-              位置: {{ v.location ? '[' + v.location.map(x => Math.round(x)).join(', ') + ']' : '—' }}
+              帧号: {{ v.frame }} | 车辆ID: {{ v.track_id || '—' }}
+              <span v-if="v.speed_kmh">
+                | 速度: <span :style="{ color: getSpeedColor(v.speed_kmh), fontWeight: '600' }">{{ v.speed_kmh }} km/h</span>
+              </span>
+              <span v-if="v.vehicle_count"> | 车数: {{ v.vehicle_count }}</span>
+              | 位置: {{ v.location ? formatLocation(v.location) : '—' }}
             </div>
           </div>
-          <el-tag :type="violationTagType(v.type)" size="small">
-            {{ violationLabel(v.type) }}
+          <el-tag :type="VIOLATION_TAG_TYPES[v.type] || 'info'" size="small" effect="dark">
+            {{ VIOLATION_LABELS[v.type] || v.type }}
           </el-tag>
         </div>
       </div>
+
       <el-button
-          v-if="violations.length > 10"
+          v-if="filteredViolations.length > 10"
           link
           type="primary"
           class="view-more"
           @click="showAllViolations = !showAllViolations"
       >
-        {{ showAllViolations ? '收起' : `查看全部 ${violations.length} 条记录` }}
+        {{ showAllViolations ? '收起' : `查看全部 ${filteredViolations.length} 条记录` }}
       </el-button>
+
+      <!-- 违规时间线散点图 -->
+      <div class="violation-chart-section" v-if="filteredViolations.length > 1">
+        <h4 class="chart-subtitle">
+          <el-icon><TrendCharts /></el-icon>
+          违规时间线
+        </h4>
+        <div ref="violationChartRef" class="violation-chart"></div>
+      </div>
     </div>
 
     <!-- 原始数据 -->
@@ -356,7 +407,15 @@ import { useRoute, useRouter } from 'vue-router'
 import { ElLoading } from 'element-plus'
 import { toast } from '@/utils/ui'
 import * as echarts from 'echarts'
-import {getResult, getDetailedResult, downloadVideo, getVideoStreamUrl} from '@/api'
+import { getResult, getDetailedResult, downloadVideo, getVideoStreamUrl } from '@/api'
+import { debugLog } from '@/utils/debug'
+import { formatTime, formatSize, formatDuration } from '@/utils/format'
+import { getStatusClass, getStatusText } from '@/utils/status'
+import {
+  VIOLATION_LABELS, VIOLATION_TITLES, VIOLATION_COLORS,
+  VIOLATION_TAG_TYPES, VIOLATION_ICONS, getViolationSeverity,
+  getSeverityColor, VIOLATION_TYPES
+} from '@/utils/violation'
 
 const route = useRoute()
 const router = useRouter()
@@ -384,40 +443,44 @@ let trendChartInstance = null
 const trendChartRef = ref(null)  // 用于模板 ref
 
 const showAllViolations = ref(false)
+const violationFilter = ref('')
+const violationChartRef = ref(null)
+let violationChartInst = null
 
-const displayViolations = computed(() => {
-  if (showAllViolations.value) return violations.value
-  return violations.value.slice(0, 10)
+const violationTypeCount = (type) => {
+  return violations.value.filter(v => v.type === type).length
+}
+
+const filteredViolations = computed(() => {
+  if (!violationFilter.value) return violations.value
+  return violations.value.filter(v => v.type === violationFilter.value)
 })
 
-const violationTitle = (type) => {
-  const map = {
-    'wrong_direction': '逆行检测',
-    'illegal_parking': '违停检测',
-    'speeding': '超速检测',
-    'congestion': '拥堵预警'
-  }
-  return map[type] || '异常事件'
+const displayViolations = computed(() => {
+  const list = filteredViolations.value
+  if (showAllViolations.value) return list
+  return list.slice(0, 10)
+})
+
+const getSeverityLabel = (v) => {
+  const sev = getViolationSeverity(v.type, v.speed_kmh)
+  return { critical: '严重', high: '高危', medium: '警告', low: '提示' }[sev] || '提示'
 }
 
-const violationLabel = (type) => {
-  const map = {
-    'wrong_direction': '逆行',
-    'illegal_parking': '违停',
-    'speeding': '超速',
-    'congestion': '拥堵'
-  }
-  return map[type] || type
+const getSeverityTagType = (v) => {
+  const sev = getViolationSeverity(v.type, v.speed_kmh)
+  return { critical: 'danger', high: 'danger', medium: 'warning', low: 'info' }[sev] || 'info'
 }
 
-const violationTagType = (type) => {
-  const map = {
-    'wrong_direction': 'danger',
-    'illegal_parking': 'warning',
-    'speeding': 'danger',
-    'congestion': 'info'
-  }
-  return map[type] || 'info'
+const getSpeedColor = (kmh) => {
+  if (kmh > 90) return '#ef4444'
+  if (kmh > 60) return '#f59e0b'
+  return '#10b981'
+}
+
+const formatLocation = (loc) => {
+  if (!loc || !Array.isArray(loc)) return '—'
+  return '[' + loc.map(x => typeof x === 'number' ? Math.round(x) : x).join(', ') + ']'
 }
 
 // 计算属性保持不变...
@@ -468,7 +531,6 @@ onMounted(() => {
   loadData()
 })
 
-// ✅ 监听 chartType 变化，切换图表类型
 watch(chartType, () => {
   initTrendChart()
 })
@@ -479,19 +541,27 @@ watch(() => task.value?.status, (status) => {
   }
 })
 
+watch(filteredViolations, () => {
+  nextTick(() => initViolationChart())
+}, { deep: true })
+
+watch(violationFilter, () => {
+  showAllViolations.value = false
+})
+
 // ✅ 修复：加载任务数据，添加详细调试
 const loadData = async () => {
   loading.value = true
   task.value = null
 
   try {
-    console.log('=== 开始加载任务 ===')
-    console.log('任务ID:', taskId.value)
+    debugLog('=== 开始加载任务 ===')
+    debugLog('任务ID:', taskId.value)
 
     // 获取基本信息
-    console.log('请求 URL:', `/traffic/result/${taskId.value}`)
+    debugLog('请求 URL:', `/traffic/result/${taskId.value}`)
     const res = await getResult(taskId.value)
-    console.log('API返回:', res.data)
+    debugLog('API返回:', res.data)
 
     if (res.data.code !== 200) {
       throw new Error(res.data.message || '获取任务失败')
@@ -503,14 +573,14 @@ const loadData = async () => {
       throw new Error('任务数据为空')
     }
 
-    console.log('任务状态:', task.value.status)
-    console.log('任务结果JSON:', task.value.resultJson)
+    debugLog('任务状态:', task.value.status)
+    debugLog('任务结果JSON:', task.value.resultJson)
 
     // 解析结果JSON
     if (task.value.resultJson) {
       try {
         parsedResult.value = JSON.parse(task.value.resultJson)
-        console.log('解析结果成功:', parsedResult.value)
+        debugLog('解析结果成功:', parsedResult.value)
       } catch (e) {
         console.error('解析结果JSON失败:', e)
         parsedResult.value = null
@@ -520,9 +590,9 @@ const loadData = async () => {
     // 获取详细结果（仅当任务完成时）
     if (task.value.status === 2) {
       try {
-        console.log('任务已完成，获取详细结果...')
+        debugLog('任务已完成，获取详细结果...')
         const detailRes = await getDetailedResult(taskId.value)
-        console.log('详细结果返回:', detailRes.data)
+        debugLog('详细结果返回:', detailRes.data)
 
         if (detailRes.data.code === 200) {
           detailedResult.value = detailRes.data.data
@@ -554,9 +624,9 @@ const loadData = async () => {
 
 // ✅ 修复：初始化视频，添加详细调试
 const initVideo = () => {
-  console.log('=== 初始化视频 ===')
-  console.log('videoPlayer ref:', videoPlayer.value)
-  console.log('videoStreamUrl:', videoStreamUrl.value)
+  debugLog('=== 初始化视频 ===')
+  debugLog('videoPlayer ref:', videoPlayer.value)
+  debugLog('videoStreamUrl:', videoStreamUrl.value)
 
   if (!videoPlayer.value) {
     console.error('videoPlayer ref 为 null')
@@ -573,13 +643,13 @@ const initVideo = () => {
 
   // 设置视频源
   const url = videoStreamUrl.value
-  console.log('设置视频 src:', url)
+  debugLog('设置视频 src:', url)
 
   videoPlayer.value.src = url
 
   // 添加事件监听（调试用）
   videoPlayer.value.onloadeddata = () => {
-    console.log('视频数据已加载')
+    debugLog('视频数据已加载')
     onVideoReady()
   }
 
@@ -591,7 +661,7 @@ const initVideo = () => {
   // 尝试加载
   try {
     videoPlayer.value.load()
-    console.log('video.load() 已调用')
+    debugLog('video.load() 已调用')
   } catch (err) {
     console.error('video.load() 失败:', err)
     videoLoading.value = false
@@ -601,7 +671,7 @@ const initVideo = () => {
 }
 
 const onVideoReady = () => {
-  console.log('视频就绪')
+  debugLog('视频就绪')
   videoLoading.value = false
   videoError.value = false
   videoInfo.value = {
@@ -636,7 +706,7 @@ const onVideoError = (e) => {
 }
 
 const retryLoadVideo = () => {
-  console.log('重试加载视频...')
+  debugLog('重试加载视频...')
   videoRetryCount.value++
   initVideo()
 }
@@ -681,7 +751,7 @@ const scrollToVideo = () => {
   if (el) {
     el.scrollIntoView({ behavior: 'smooth' })
     if (videoPlayer.value && videoPlayer.value.paused) {
-      videoPlayer.value.play().catch(e => console.log('自动播放失败:', e))
+      videoPlayer.value.play().catch(e => debugLog('自动播放失败:', e))
     }
   }
 }
@@ -689,11 +759,11 @@ const scrollToVideo = () => {
 // ✅ 修复：初始化 ECharts，使用 trendChartRef
 const initTrendChart = () => {
   if (!frameData.value.length) {
-    console.log('没有帧数据，跳过图表初始化')
+    debugLog('没有帧数据，跳过图表初始化')
     return
   }
 
-  console.log('初始化图表...')
+  debugLog('初始化图表...')
 
   // 如果已存在实例，先销毁
   if (trendChartInstance) {
@@ -708,7 +778,7 @@ const initTrendChart = () => {
   // 使用 nextTick 确保 DOM 已更新
   nextTick(() => {
     const chartDom = trendChartRef.value  // ✅ 使用 ref 获取 DOM
-    console.log('图表 DOM 元素:', chartDom)
+    debugLog('图表 DOM 元素:', chartDom)
 
     if (!chartDom) {
       console.error('找不到图表容器 DOM')
@@ -721,9 +791,9 @@ const initTrendChart = () => {
       const option = {
         tooltip: {
           trigger: 'axis',
-          backgroundColor: 'rgba(30, 41, 59, 0.9)',
+          backgroundColor: 'rgba(255, 255, 255, 0.95)',
           borderColor: 'rgba(99, 102, 241, 0.3)',
-          textStyle: { color: '#f1f5f9' },
+          textStyle: { color: '#1e293b' },
           formatter: (params) => {
             const p = params[0]
             return `时间: ${p.name}s<br/>车辆数: ${p.value}`
@@ -739,16 +809,16 @@ const initTrendChart = () => {
           type: 'category',
           data: frameData.value.map(f => f.timestamp.toFixed(1)),
           name: '时间 (s)',
-          axisLine: { lineStyle: { color: '#475569' } },
-          axisLabel: { color: '#94a3b8' }
+          axisLine: { lineStyle: { color: '#d0d5dd' } },
+          axisLabel: { color: '#64748b' }
         },
         yAxis: {
           type: 'value',
           name: '车辆数',
           minInterval: 1,
-          axisLine: { lineStyle: { color: '#475569' } },
-          axisLabel: { color: '#94a3b8' },
-          splitLine: { lineStyle: { color: '#1e293b' } }
+          axisLine: { lineStyle: { color: '#d0d5dd' } },
+          axisLabel: { color: '#64748b' },
+          splitLine: { lineStyle: { color: '#e2e8f0' } }
         },
         series: [{
           name: '车辆数',
@@ -775,9 +845,80 @@ const initTrendChart = () => {
       }
 
       trendChartInstance.setOption(option)
-      console.log('图表初始化完成')
     } catch (e) {
-      console.error('图表初始化失败:', e)
+      debugLog('图表初始化失败:', e)
+    }
+  })
+}
+
+// 违规时间线散点图
+const initViolationChart = () => {
+  const list = filteredViolations.value
+  if (!list || list.length < 2) return
+
+  const chartDom = violationChartRef.value
+  if (!chartDom) return
+
+  if (violationChartInst) {
+    try { violationChartInst.dispose() } catch (e) {}
+    violationChartInst = null
+  }
+
+  nextTick(() => {
+    try {
+      violationChartInst = echarts.init(chartDom)
+      const categories = VIOLATION_TYPES.filter(t => violationTypeCount(t) > 0)
+
+      const series = categories.map(t => ({
+        name: VIOLATION_LABELS[t],
+        type: 'scatter',
+        data: list
+          .filter(v => v.type === t)
+          .map(v => ({
+            value: [v.timestamp || 0, VIOLATION_LABELS[t], v.speed_kmh || 1, v],
+            symbolSize: v.type === 'speeding' && v.speed_kmh
+              ? Math.max(8, Math.min(40, v.speed_kmh / 3))
+              : 12
+          })),
+        itemStyle: { color: VIOLATION_COLORS[t] },
+        emphasis: {
+          scale: 2,
+          itemStyle: { shadowBlur: 10, shadowColor: VIOLATION_COLORS[t] + '80' }
+        }
+      }))
+
+      violationChartInst.setOption({
+        tooltip: {
+          trigger: 'item',
+          backgroundColor: 'rgba(255, 255, 255, 0.97)',
+          borderColor: 'rgba(99, 102, 241, 0.3)',
+          textStyle: { color: '#1e293b' },
+          formatter: (params) => {
+            const v = params.value[3]
+            if (!v) return params.name
+            return `<b>${VIOLATION_TITLES[v.type] || v.type}</b><br/>
+              时间: ${(v.timestamp || 0).toFixed(1)}s | 帧号: ${v.frame}<br/>
+              车辆ID: ${v.track_id || '—'}${v.speed_kmh ? '<br/>速度: ' + v.speed_kmh + ' km/h' : ''}`
+          }
+        },
+        grid: { left: '5%', right: '8%', bottom: '8%', top: '8%' },
+        xAxis: {
+          type: 'value',
+          name: '时间 (s)',
+          axisLine: { lineStyle: { color: '#d0d5dd' } },
+          axisLabel: { color: '#64748b' },
+          splitLine: { lineStyle: { color: '#e2e8f0' } }
+        },
+        yAxis: {
+          type: 'category',
+          data: categories.map(t => VIOLATION_LABELS[t]),
+          axisLine: { lineStyle: { color: '#d0d5dd' } },
+          axisLabel: { color: '#94a3b8', fontWeight: 600 }
+        },
+        series
+      })
+    } catch (e) {
+      debugLog('违规图表初始化失败:', e)
     }
   })
 }
@@ -817,48 +958,16 @@ const exportData = async () => {
   }
 }
 
-// 辅助函数保持不变
-const getStatusClass = (status) => {
-  const map = { 0: 'pending', 1: 'processing', 2: 'success', 3: 'error' }
-  return map[status] || 'pending'
-}
-
-const getStatusText = (status) => {
-  const map = { 0: '等待处理', 1: '正在分析', 2: '分析完成', 3: '分析失败' }
-  return map[status] || '未知状态'
-}
-
-const formatTime = (time) => {
-  if (!time) return '-'
-  return new Date(time).toLocaleString('zh-CN')
-}
-
-const formatDuration = (sec) => {
-  if (!sec) return '-'
-  const m = Math.floor(sec / 60)
-  const s = Math.floor(sec % 60)
-  return m > 0 ? `${m}分${s}秒` : `${s}秒`
-}
-
-const formatSize = (bytes) => {
-  if (!bytes) return '0 B'
-  const k = 1024
-  const sizes = ['B', 'KB', 'MB', 'GB']
-  const i = Math.floor(Math.log(bytes) / Math.log(k))
-  return (bytes / Math.pow(k, i)).toFixed(2) + ' ' + sizes[i]
-}
-
 // ✅ 修复：清理函数
 onUnmounted(() => {
-  console.log('组件卸载，清理资源')
-  if (trendChartInstance) {
-    try {
-      trendChartInstance.dispose()
-      trendChartInstance = null
-    } catch (e) {
-      console.warn('销毁图表失败:', e)
+  debugLog('组件卸载，清理资源')
+  for (const inst of [trendChartInstance, violationChartInst]) {
+    if (inst) {
+      try { inst.dispose() } catch (e) { debugLog('销毁图表失败:', e) }
     }
   }
+  trendChartInstance = null
+  violationChartInst = null
   if (videoPlayer.value) {
     videoPlayer.value.pause()
     videoPlayer.value.src = ''
@@ -1314,6 +1423,68 @@ onUnmounted(() => {
   border-color: #f59e0b;
 }
 
+.violation-item.speeding {
+  border-color: #dc2626;
+}
+
+.violation-item.congestion {
+  border-color: #3b82f6;
+}
+
+/* 违规摘要卡片 */
+.violation-summary-cards {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 12px;
+  margin-bottom: 20px;
+}
+
+.violation-summary-card {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 14px 16px;
+  background: var(--bg-dark);
+  border: 1px solid;
+  border-radius: 10px;
+}
+
+.summary-icon {
+  width: 36px;
+  height: 36px;
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.summary-info {
+  display: flex;
+  flex-direction: column;
+}
+
+.summary-count {
+  font-size: 22px;
+  font-weight: 700;
+  color: var(--text-primary);
+  line-height: 1.2;
+}
+
+.summary-label {
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+/* 筛选栏 */
+.violation-filter {
+  margin-bottom: 16px;
+}
+
+/* 严重程度标签 */
+.severity-tag {
+  margin: 0 4px;
+}
+
 .violation-icon {
   width: 40px;
   height: 40px;
@@ -1322,13 +1493,6 @@ onUnmounted(() => {
   align-items: center;
   justify-content: center;
   font-size: 20px;
-  background: rgba(239, 68, 68, 0.1);
-  color: #ef4444;
-}
-
-.violation-item.illegal_parking .violation-icon {
-  background: rgba(245, 158, 11, 0.1);
-  color: #f59e0b;
 }
 
 .violation-info {
@@ -1338,7 +1502,7 @@ onUnmounted(() => {
 .violation-title {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: 8px;
   font-weight: 600;
   margin-bottom: 4px;
 }
@@ -1347,6 +1511,7 @@ onUnmounted(() => {
   font-size: 12px;
   color: var(--text-secondary);
   font-weight: normal;
+  margin-left: auto;
 }
 
 .violation-detail {
@@ -1357,6 +1522,27 @@ onUnmounted(() => {
 .view-more {
   margin-top: 16px;
   width: 100%;
+}
+
+/* 违规时间线图表 */
+.violation-chart-section {
+  margin-top: 24px;
+  padding-top: 20px;
+  border-top: 1px solid var(--border);
+}
+
+.chart-subtitle {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin-bottom: 12px;
+}
+
+.violation-chart {
+  height: 250px;
 }
 
 /* 原始数据 */
