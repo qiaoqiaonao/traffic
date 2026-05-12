@@ -8,6 +8,9 @@ target/
 *.log
 *.tmp
 
+#ai
+ai/
+
 # Node / Vue
 node_modules/
 dist/
