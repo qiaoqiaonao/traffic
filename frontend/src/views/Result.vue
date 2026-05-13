@@ -316,7 +316,9 @@
             v-for="(v, idx) in displayViolations"
             :key="idx"
             class="violation-item"
-            :class="v.type"
+            :class="[v.type, { clickable: true }]"
+            @click="jumpToVideo(v)"
+            title="点击跳转到视频对应位置"
         >
           <div class="violation-icon" :style="{ background: VIOLATION_COLORS[v.type] + '18', color: VIOLATION_COLORS[v.type] }">
             <el-icon><component :is="VIOLATION_ICONS[v.type] || 'Warning'" /></el-icon>
@@ -756,6 +758,38 @@ const scrollToVideo = () => {
   }
 }
 
+/**
+ * 点击违规记录：滚动到视频区域，设置时间并暂停
+ */
+const jumpToVideo = (violation) => {
+  const el = document.getElementById('video-section')
+  if (!el || !videoPlayer.value) {
+    toast.warning('视频播放器未就绪')
+    return
+  }
+
+  // 滚动到视频区域
+  el.scrollIntoView({ behavior: 'smooth', block: 'center' })
+
+  // 等待滚动完成后设置时间并暂停
+  setTimeout(() => {
+    const targetTime = violation.timestamp || 0
+    const duration = videoPlayer.value.duration || 0
+
+    // 安全检查：确保时间在有效范围内
+    if (duration > 0 && targetTime >= duration) {
+      videoPlayer.value.currentTime = Math.max(0, duration - 1)
+    } else {
+      videoPlayer.value.currentTime = Math.max(0, targetTime)
+    }
+
+    // 确保视频暂停在违规位置
+    videoPlayer.value.pause()
+
+    toast.success(`已定位到 ${VIOLATION_LABELS[violation.type] || violation.type}  (${targetTime.toFixed(2)}s)`)
+  }, 400)
+}
+
 // ✅ 修复：初始化 ECharts，使用 trendChartRef
 const initTrendChart = () => {
   if (!frameData.value.length) {
@@ -873,13 +907,13 @@ const initViolationChart = () => {
         name: VIOLATION_LABELS[t],
         type: 'scatter',
         data: list
-          .filter(v => v.type === t)
-          .map(v => ({
-            value: [v.timestamp || 0, VIOLATION_LABELS[t], v.speed_kmh || 1, v],
-            symbolSize: v.type === 'speeding' && v.speed_kmh
-              ? Math.max(8, Math.min(40, v.speed_kmh / 3))
-              : 12
-          })),
+            .filter(v => v.type === t)
+            .map(v => ({
+              value: [v.timestamp || 0, VIOLATION_LABELS[t], v.speed_kmh || 1, v],
+              symbolSize: v.type === 'speeding' && v.speed_kmh
+                  ? Math.max(8, Math.min(40, v.speed_kmh / 3))
+                  : 12
+            })),
         itemStyle: { color: VIOLATION_COLORS[t] },
         emphasis: {
           scale: 2,
@@ -1413,6 +1447,17 @@ onUnmounted(() => {
   background: var(--bg-dark);
   border-radius: 12px;
   border-left: 4px solid;
+  transition: all 0.2s ease;
+}
+
+.violation-item.clickable {
+  cursor: pointer;
+}
+
+.violation-item.clickable:hover {
+  background: var(--bg-card);
+  transform: translateX(4px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
 }
 
 .violation-item.wrong_direction {

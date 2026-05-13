@@ -174,7 +174,7 @@ const recentTasks = ref([])
 const heroStats = ref([
   { value: '50+', label: '支持车型' },
   { value: '<30ms', label: '单帧推理' },
-  { value: '99.2%', label: '检测精度' },
+  { value: '97.2%', label: '检测精度' },
   { value: '24/7', label: '全天候运行' }
 ])
 
