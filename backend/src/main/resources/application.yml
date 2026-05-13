@@ -15,15 +15,13 @@ ai:
     polling:
       base-delay-ms: 2000
       max-delay-ms: 10000
-      max-attempts: 60
+      max-attempts: 300
       max-consecutive-errors: 5
       circuit-cooldown-seconds: 30
 
 # ---- Logging ----
-logging:
-  level:
-    com.traffic: DEBUG
-    com.baomidou.mybatisplus: DEBUG
+# 日志配置已迁移到 logback-spring.xml
+# 如需调整，请修改 logback-spring.xml
 
 # ---- Database ----
 spring:
@@ -62,7 +60,7 @@ mybatis-plus:
   type-aliases-package: com.traffic.entity
   configuration:
     map-underscore-to-camel-case: true
-    log-impl: org.apache.ibatis.logging.stdout.StdOutImpl
+    # log-impl: org.apache.ibatis.logging.stdout.StdOutImpl
   global-config:
     db-config:
       id-type: auto

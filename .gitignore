@@ -11,6 +11,9 @@ target/
 #ai
 ai/
 
+#log
+logs
+
 # Node / Vue
 node_modules/
 dist/

@@ -202,7 +202,7 @@ import { toast, confirmAction } from '@/utils/ui'
 import { formatSize, formatTime } from '@/utils/format'
 import { getStatusClass, getStatusText, getStatusType } from '@/utils/status'
 import { debugLog } from '@/utils/debug'
-import { getVideoStreamUrl } from '@/config'
+import { getVideoStreamUrl ,getWsProgressUrl } from '@/config'
 
 const router = useRouter()
 const loading = ref(false)
@@ -224,6 +224,7 @@ const stats = computed(() => {
 })
 
 const pollingTimer = ref(null)
+const wsConnections = ref({})
 
 onMounted(() => {
   loadHistory()
@@ -237,9 +238,10 @@ onUnmounted(() => {
 const startPolling = () => {
   if (pollingTimer.value) return
   pollingTimer.value = setInterval(() => {
-    // 只有当前页存在处理中任务时才静默刷新（不显示loading）
     if (tasks.value.some(t => t.status === 1)) {
       silentRefresh()
+      // 为处理中任务建立WebSocket连接
+      connectProcessingTasksWs()
     }
   }, 3000)
 }
@@ -249,6 +251,47 @@ const stopPolling = () => {
     clearInterval(pollingTimer.value)
     pollingTimer.value = null
   }
+  // 添加：关闭所有WebSocket连接
+  Object.values(wsConnections.value).forEach(ws => {
+    if (ws && ws.readyState === WebSocket.OPEN) ws.close()
+  })
+  wsConnections.value = {}
+}
+
+// 新增：为处理中任务建立WebSocket连接
+const connectProcessingTasksWs = () => {
+  tasks.value.forEach(task => {
+    if (task.status === 1 && !wsConnections.value[task.taskId]) {
+      const wsUrl = getWsProgressUrl(task.taskId)
+      const ws = new WebSocket(wsUrl)
+      wsConnections.value[task.taskId] = ws
+
+      ws.onmessage = (e) => {
+        try {
+          const data = JSON.parse(e.data)
+          // 更新对应任务的进度
+          const targetTask = tasks.value.find(t => t.taskId === data.taskId)
+          if (targetTask && data.progress !== undefined) {
+            targetTask.progress = data.progress
+            // 如果任务完成或失败，刷新列表
+            if (data.progress >= 100 || data.progress < 0) {
+              setTimeout(() => loadHistory(), 500)
+            }
+          }
+        } catch (err) {
+          // 忽略解析错误
+        }
+      }
+
+      ws.onclose = () => {
+        delete wsConnections.value[task.taskId]
+      }
+
+      ws.onerror = () => {
+        delete wsConnections.value[task.taskId]
+      }
+    }
+  })
 }
 
 const silentRefresh = async () => {
@@ -285,18 +328,16 @@ const handleSizeChange = (size) => {
 const loadHistory = async () => {
   loading.value = true
   try {
-    // 加调试日志确认参数
-    debugLog('请求页码:', currentPage.value, '页大小:', pageSize.value)
-
     const res = await getHistory({
       page: currentPage.value,
       pageSize: pageSize.value,
       status: filterStatus.value
     })
-
     if (res.data.code === 200) {
       tasks.value = res.data.data.records || []
       total.value = res.data.data.total
+      // 添加：加载完成后为处理中任务连接WebSocket
+      connectProcessingTasksWs()
     }
   } catch (e) {
     toast.error('加载失败: ' + e.message)

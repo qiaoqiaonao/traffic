@@ -117,8 +117,7 @@ public class AsyncAnalyzeService {
         log.info("开始异步任务: taskId={}", taskId);
 
         try {
-            taskDbService.updateProgress(taskId, 5);
-            webSocketService.sendProgress(taskId, 5, "准备上传视频...");
+            webSocketService.sendProgress(taskId, 2, "准备上传...");
 
             Path videoFile = Paths.get(filePath);
             if (!Files.exists(videoFile)) {
@@ -137,8 +136,6 @@ public class AsyncAnalyzeService {
             HttpHeaders headers = new HttpHeaders();
             headers.setContentType(MediaType.MULTIPART_FORM_DATA);
             HttpEntity<MultiValueMap<String, Object>> request = new HttpEntity<>(body, headers);
-
-            webSocketService.sendProgress(taskId, 10, "上传到AI服务...");
 
             ResponseEntity<Map> response = restTemplate.exchange(
                     aiServiceUrl + "/api/analyze/upload",
@@ -246,6 +243,7 @@ public class AsyncAnalyzeService {
                 Integer progress = (Integer) data.get("progress");
 
                 webSocketService.sendProgress(taskId, progress, (String) data.get("message"));
+                taskDbService.updateProgress(taskId, progress);
 
                 if ("completed".equals(status)) {
                     Map<String, Object> resultData = (Map<String, Object>) data.get("result");
