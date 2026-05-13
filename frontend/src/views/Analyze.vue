@@ -376,7 +376,7 @@ const startUpload = async () => {
 
     if (res.data.code === 200) {
       taskId.value = res.data.data.taskId
-      progress.value = 10
+      progress.value = 0
       statusMessage.value = '开始处理...'
       initWebSocket()
 

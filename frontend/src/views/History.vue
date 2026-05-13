@@ -123,7 +123,7 @@
           </template>
         </el-table-column>
 
-        <el-table-column label="操作" width="200" fixed="right">
+        <el-table-column label="操作" width="260" fixed="right">
           <template #default="{ row }">
             <div class="action-cell">
               <el-button
@@ -148,10 +148,19 @@
                   v-if="row.status === 1"
                   type="danger"
                   link
-                  @click.stop="cancelTask(row)"
+                  @click.stop="cancelTaskHandler(row)"
               >
                 <el-icon><CircleClose /></el-icon>
                 取消
+              </el-button>
+              <el-button
+                  v-if="row.status !== 1"
+                  type="danger"
+                  link
+                  @click.stop="deleteTaskHandler(row)"
+              >
+                <el-icon><Delete /></el-icon>
+                删除
               </el-button>
             </div>
           </template>
@@ -186,9 +195,9 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { useRouter } from 'vue-router'
-import { getHistory, cancelTask } from '@/api'
+import { getHistory, cancelTask, deleteHistory } from '@/api'
 import { toast, confirmAction } from '@/utils/ui'
 import { formatSize, formatTime } from '@/utils/format'
 import { getStatusClass, getStatusText, getStatusType } from '@/utils/status'
@@ -214,12 +223,56 @@ const stats = computed(() => {
   return s
 })
 
+const pollingTimer = ref(null)
+
 onMounted(() => {
   loadHistory()
+  startPolling()
 })
 
+onUnmounted(() => {
+  stopPolling()
+})
+
+const startPolling = () => {
+  if (pollingTimer.value) return
+  pollingTimer.value = setInterval(() => {
+    // 只有当前页存在处理中任务时才静默刷新（不显示loading）
+    if (tasks.value.some(t => t.status === 1)) {
+      silentRefresh()
+    }
+  }, 3000)
+}
+
+const stopPolling = () => {
+  if (pollingTimer.value) {
+    clearInterval(pollingTimer.value)
+    pollingTimer.value = null
+  }
+}
+
+const silentRefresh = async () => {
+  try {
+    const res = await getHistory({
+      page: currentPage.value,
+      pageSize: pageSize.value,
+      status: filterStatus.value
+    })
+    if (res.data.code === 200) {
+      tasks.value = res.data.data.records || []
+      total.value = res.data.data.total
+      // 如果没有处理中任务了，停止轮询
+      if (!tasks.value.some(t => t.status === 1)) {
+        stopPolling()
+      }
+    }
+  } catch (e) {
+    // 静默失败
+  }
+}
+
 const handlePageChange = (page) => {
-  currentPage.value = page  // 确保更新
+  currentPage.value = page
   loadHistory()
 }
 
@@ -287,6 +340,25 @@ const cancelTaskHandler = async (row) => {
     loadHistory()
   } catch (e) {
     // 取消操作
+  }
+}
+
+const deleteTaskHandler = async (row) => {
+  try {
+    await confirmAction(
+      `确定要删除「${row.fileName}」的分析记录吗？删除后不可恢复。`,
+      '删除记录',
+      { confirmButtonText: '确定删除', type: 'warning' }
+    )
+    await deleteHistory(row.taskId)
+    toast.success('已删除')
+    loadHistory()
+    // 删除后检查是否需要重启轮询
+    if (tasks.value.some(t => t.status === 1)) {
+      startPolling()
+    }
+  } catch (e) {
+    // 取消
   }
 }
 </script>

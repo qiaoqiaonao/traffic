@@ -206,6 +206,15 @@ public class TaskDbService extends ServiceImpl<AnalyzeTaskMapper, AnalyzeTask> {
         }
     }
 
+    @Transactional
+    public void deleteTask(String taskId) {
+        lambdaUpdate()
+                .eq(AnalyzeTask::getTaskId, taskId)
+                .remove();
+        taskService.delete(taskId);
+        log.info("任务已删除: taskId={}", taskId);
+    }
+
     // 辅助方法：安全获取 Integer
     private Integer getIntValue(java.util.Map<String, Object> map, String key) {
         if (map == null) return 0;

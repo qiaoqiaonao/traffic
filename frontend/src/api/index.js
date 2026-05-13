@@ -83,6 +83,10 @@ export const getHistory = (params = {}) => {
     })
 }
 
+export const deleteHistory = (taskId) => {
+    return api.delete(`/traffic/history/${taskId}`)
+}
+
 // ========== 图片检测 ==========
 export const analyzeFrame = (file) => {
     const formData = new FormData()

@@ -225,6 +225,23 @@ public class TrafficController {
     }
 
     /**
+     * 删除历史记录
+     */
+    @DeleteMapping("/history/{taskId}")
+    public ApiResponse<Void> deleteHistory(@PathVariable String taskId) {
+        AnalyzeTask task = taskDbService.getByTaskId(taskId);
+        if (task == null) {
+            return ApiResponse.error(404, "任务不存在");
+        }
+        // 先取消进行中的任务
+        if (task.getStatus() == TaskStatus.PROCESSING.getCode()) {
+            asyncAnalyzeService.cancelTask(taskId);
+        }
+        taskDbService.deleteTask(taskId);
+        return ApiResponse.success(null);
+    }
+
+    /**
      * 取消任务
      */
     @PostMapping("/cancel/{taskId}")
