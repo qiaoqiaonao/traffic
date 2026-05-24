@@ -135,7 +135,22 @@
           </div>
 
           <div class="config-item">
-            <label>像素比例（影响车速计算精度）</label>
+            <label>监控场景（自动匹配像素比例）</label>
+            <el-select v-model="config.scene" size="large" style="width: 100%">
+              <el-option
+                  v-for="opt in sceneOptions"
+                  :key="opt.value"
+                  :label="opt.label"
+                  :value="opt.value"
+              >
+                <span style="float: left">{{ opt.label }}</span>
+                <span style="float: right; color: #8492a6; font-size: 13px">{{ opt.desc }}</span>
+              </el-option>
+            </el-select>
+          </div>
+
+          <div class="config-item" v-if="config.scene === 'custom'">
+            <label>自定义像素比例（影响车速计算精度）</label>
             <el-select v-model="config.metersPerPixel" size="large" style="width: 100%">
               <el-option
                   v-for="opt in metersPerPixelOptions"
@@ -147,6 +162,9 @@
                 <span style="float: right; color: #8492a6; font-size: 13px">{{ opt.desc }}</span>
               </el-option>
             </el-select>
+            <div style="margin-top: 8px; color: #8492a6; font-size: 13px">
+              当前: {{ config.metersPerPixel }} m/px | 车辆实际宽度 ≈ {{ (2.0 / config.metersPerPixel).toFixed(0) }} 像素
+            </div>
           </div>
         </div>
 
@@ -277,19 +295,41 @@ const frameSkipOptions = [
   { value: 5, label: '跳4帧', desc: '快速预览' }
 ]
 
+const sceneOptions = [
+  { value: 'intersection_low', label: '路口监控（低杆）', desc: '摄像头高度3-5米', mpp: 0.035 },
+  { value: 'intersection_high', label: '路口监控（高杆）', desc: '摄像头高度6-8米', mpp: 0.055 },
+  { value: 'highway', label: '高速公路', desc: '摄像头高度8-12米', mpp: 0.08 },
+  { value: 'parking', label: '停车场/小区', desc: '摄像头高度3-6米', mpp: 0.025 },
+  { value: 'drone', label: '无人机俯拍', desc: '高空俯视视角', mpp: 0.12 },
+  { value: 'custom', label: '自定义像素比例', desc: '手动输入', mpp: 0.05 }
+]
+
 const metersPerPixelOptions = [
-  { value: 0.02, label: '近景 (0.02 m/px)', desc: '摄像头离道路较近' },
-  { value: 0.05, label: '标准 (0.05 m/px)', desc: '推荐设置' },
-  { value: 0.08, label: '中远景 (0.08 m/px)', desc: '摄像头离道路较远' },
-  { value: 0.12, label: '远景 (0.12 m/px)', desc: '高空/远距离摄像头' }
+  { value: 0.01, label: '0.01 m/px', desc: '极近（<2米）' },
+  { value: 0.02, label: '0.02 m/px', desc: '近景（2-3米）' },
+  { value: 0.035, label: '0.035 m/px', desc: '较近（3-5米）' },
+  { value: 0.05, label: '0.05 m/px', desc: '标准（5-6米）' },
+  { value: 0.065, label: '0.065 m/px', desc: '中等（6-8米）' },
+  { value: 0.08, label: '0.08 m/px', desc: '中远（8-10米）' },
+  { value: 0.1, label: '0.10 m/px', desc: '较远（10-12米）' },
+  { value: 0.12, label: '0.12 m/px', desc: '远景（>12米）' }
 ]
 
 const config = ref({
   direction: 'vertical',
   position: 50,
   frameSkip: 2,
-  metersPerPixel: 0.05,
+  scene: 'intersection_low',  // 新增：场景选择
+  metersPerPixel: 0.035,
   oneWay: false
+})
+
+// 场景变化时自动更新 metersPerPixel
+watch(() => config.value.scene, (newScene) => {
+  const scene = sceneOptions.find(s => s.value === newScene)
+  if (scene && scene.value !== 'custom') {
+    config.value.metersPerPixel = scene.mpp
+  }
 })
 
 const metrics = ref({
@@ -449,13 +489,13 @@ const updateProgress = (data) => {
 const confirmCancel = async () => {
   try {
     await confirmAction(
-      '确定要取消当前分析任务吗？取消后需重新上传视频。',
-      '取消分析',
-      {
-        confirmButtonText: '确定取消',
-        cancelButtonText: '继续分析',
-        type: 'warning'
-      }
+        '确定要取消当前分析任务吗？取消后需重新上传视频。',
+        '取消分析',
+        {
+          confirmButtonText: '确定取消',
+          cancelButtonText: '继续分析',
+          type: 'warning'
+        }
     )
 
     await cancelTask(taskId.value)

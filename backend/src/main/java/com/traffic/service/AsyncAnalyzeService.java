@@ -117,7 +117,7 @@ public class AsyncAnalyzeService {
         log.info("开始异步任务: taskId={}", taskId);
 
         try {
-            webSocketService.sendProgress(taskId, 2, "准备上传...");
+            webSocketService.sendProgress(taskId, 0, "准备上传...");
 
             Path videoFile = Paths.get(filePath);
             if (!Files.exists(videoFile)) {
