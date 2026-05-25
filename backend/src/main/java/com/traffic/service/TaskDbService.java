@@ -34,7 +34,7 @@ public class TaskDbService extends ServiceImpl<AnalyzeTaskMapper, AnalyzeTask> {
 
     @Transactional
     public AnalyzeTask createTask(String taskId, String fileName, String filePath,
-                                  Long fileSize, Integer frameSkip) {
+                                  Long fileSize, Integer frameSkip, Long userId) {
         AnalyzeTask task = AnalyzeTask.builder()
                 .taskId(taskId)
                 .fileName(fileName)
@@ -43,12 +43,13 @@ public class TaskDbService extends ServiceImpl<AnalyzeTaskMapper, AnalyzeTask> {
                 .status(TaskStatus.PENDING.getCode())
                 .progress(0)
                 .frameSkip(frameSkip)
+                .userId(userId)
                 .createTime(LocalDateTime.now())
                 .updateTime(LocalDateTime.now())
                 .build();
 
         save(task);
-        log.info("创建任务记录: taskId={}, status={}", taskId, task.getStatus());
+        log.info("创建任务记录: taskId={}, userId={}, status={}", taskId, userId, task.getStatus());
         return task;
     }
 
@@ -292,19 +293,22 @@ public class TaskDbService extends ServiceImpl<AnalyzeTaskMapper, AnalyzeTask> {
         return list;
     }
 
-    public Page<AnalyzeTask> getTasksByPage(int page, int pageSize, Integer status) {
+    public Page<AnalyzeTask> getTasksByPage(int page, int pageSize, Integer status, Long userId) {
         Page<AnalyzeTask> pageParam = new Page<>(page, pageSize);
 
         LambdaQueryWrapper<AnalyzeTask> wrapper = new LambdaQueryWrapper<>();
         if (status != null) {
             wrapper.eq(AnalyzeTask::getStatus, status);
         }
+        if (userId != null) {
+            wrapper.eq(AnalyzeTask::getUserId, userId);
+        }
         wrapper.orderByDesc(AnalyzeTask::getCreateTime);
 
         Page<AnalyzeTask> result = analyzeTaskMapper.selectPage(pageParam, wrapper);
 
-        log.debug("分页查询: current={}, size={}, total={}, pages={}, records={}",
-                result.getCurrent(), result.getSize(), result.getTotal(),
+        log.debug("分页查询: userId={}, current={}, size={}, total={}, pages={}, records={}",
+                userId, result.getCurrent(), result.getSize(), result.getTotal(),
                 result.getPages(), result.getRecords().size());
 
         return result;

@@ -38,6 +38,7 @@ public class AuthController {
             data.put("token", token);
             data.put("username", user.getUsername());
             data.put("nickname", user.getNickname());
+            data.put("userId", user.getId());
 
             return ApiResponse.success(data);
         } catch (IllegalArgumentException e) {
@@ -67,6 +68,7 @@ public class AuthController {
             data.put("token", token);
             data.put("username", user.getUsername());
             data.put("nickname", user.getNickname());
+            data.put("userId", user.getId());
 
             return ApiResponse.success(data);
         } catch (IllegalArgumentException e) {

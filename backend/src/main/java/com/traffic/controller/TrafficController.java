@@ -16,6 +16,7 @@ import org.springframework.web.bind.annotation.*;
 import org.springframework.web.client.RestTemplate;
 import org.springframework.web.multipart.MultipartFile;
 
+import javax.servlet.http.HttpServletRequest;
 import javax.validation.constraints.Max;
 import javax.validation.constraints.Min;
 import java.util.*;
@@ -25,6 +26,11 @@ import java.util.*;
 @Validated
 @Slf4j
 public class TrafficController {
+
+    private Long getUserId(HttpServletRequest request) {
+        Object uid = request.getAttribute("userId");
+        return uid instanceof Long ? (Long) uid : null;
+    }
 
     @Autowired
     private AsyncAnalyzeService asyncAnalyzeService;
@@ -56,20 +62,19 @@ public class TrafficController {
             @RequestParam("file") MultipartFile file,
             @RequestParam(value = "frameSkip", defaultValue = "3") @Min(1) @Max(10) Integer frameSkip,
             @RequestParam(value = "detectionLines", required = false) String detectionLinesJson,
-            @RequestParam(value = "metersPerPixel", defaultValue = "0.05") double metersPerPixel) {
+            @RequestParam(value = "metersPerPixel", defaultValue = "0.05") double metersPerPixel,
+            HttpServletRequest request) {
 
+        Long userId = getUserId(request);
         String taskId = UUID.randomUUID().toString().replace("-", "").substring(0, 16);
 
-        // 使用 default 当没传或传 0 时
         if (metersPerPixel <= 0) metersPerPixel = defaultMetersPerPixel;
 
         try {
-            // 保存文件
             String filePath = fileStorageService.saveFile(file, taskId);
 
-            // 创建数据库记录
             taskDbService.createTask(taskId, file.getOriginalFilename(), filePath,
-                    file.getSize(), frameSkip);
+                    file.getSize(), frameSkip, userId);
 
             // 启动异步任务
             asyncAnalyzeService.submitAnalyzeTask(taskId, filePath, frameSkip,
@@ -218,9 +223,11 @@ public class TrafficController {
     public ApiResponse<Page<AnalyzeTask>> getHistory(
             @RequestParam(defaultValue = "1") Integer page,
             @RequestParam(defaultValue = "10") Integer pageSize,
-            @RequestParam(required = false) Integer status) {
+            @RequestParam(required = false) Integer status,
+            HttpServletRequest request) {
 
-        Page<AnalyzeTask> pageResult = taskDbService.getTasksByPage(page, pageSize, status);
+        Long userId = getUserId(request);
+        Page<AnalyzeTask> pageResult = taskDbService.getTasksByPage(page, pageSize, status, userId);
         return ApiResponse.success(pageResult);
     }
 

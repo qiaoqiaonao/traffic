@@ -24,6 +24,7 @@ public class AnalyzeTask {
     @TableId(type = IdType.AUTO)
     private Long id;
 
+    private Long userId;
     private String taskId;
     private String fileName;
 
